@@ -5,8 +5,7 @@ from Agent import Agent
 '''
 I suggest you make a virtual enviroment in the code folder called .venv - you can do it on vscode
 by putting '>Python: Select Interpreter' then pressing 'create virtual enviroment' then venv.
-then in the terminal at the bottom (should say (.venv) before your path) do:
-'pip install gymnasium[MuJoCo]', then 'pip uninstall mujoco', then 'pip install mujoco==2.3.7'
+then run 'pip install -r requirements.txt' in the terminal at the bottom of vscode
 because the newest version doesnt work with gymnasium.
 
 if it doesnt work try making a virtual enviroment in this folder called .venv (ask me if you need help)
