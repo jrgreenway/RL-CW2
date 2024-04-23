@@ -33,7 +33,7 @@ class Agent():
         #     return torch.randint(0, self.network.output_size, (1,))
         # else:
         #     with torch.no_grad():
-        #         action = self.network(state).argmax()#Update according to nn parameters
+        #         action = self.network(state).argmax() #Update according to nn parameters
         action = np.random.randint(0,5)
         return action
     

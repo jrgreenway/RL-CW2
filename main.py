@@ -8,7 +8,7 @@ env = gym.make("ALE/Surround-v5")#render_mode='human'
 action_space = env.action_space
 print(action_space)
 # print(env.metadata) -> 'render_modes': ['human', 'rgb_array', 'depth_arr
-total_episodes = 100
+total_episodes = 10
 agent = Agent()
 rewards = agent.train(env, total_episodes)
 plt.plot(rewards)
