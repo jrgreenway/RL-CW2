@@ -95,14 +95,15 @@ class DQNAgent():
         #The optimiser updates the weightings in the nn to predict better q-values.
         #self.optimiser = torch.optim.Adam(self.network.parameters(), lr=learning_rate)
     
-    def store_transition(self, state, action, reward, next_state, done):
+    def store_transition(self, state, action, reward, next_state, terminated, truncated):
         #Store transitions in memory so that we can use them for experience replay
         index = self.memory_counter % self.memory_size    # Wraps around when memory is full, overwriting oldest memories
         self.state_memory[index]      = state
         self.action_memory[index]     = action
         self.reward_memory[index]     = reward
         self.new_state_memory[index]  = next_state
-        self.terminal_memory[index]   = done
+        self.terminal_memory[index]   = terminated
+        self.truncated_memory[index]  = truncated
         self.memory_counter          += 1
         
         
@@ -117,8 +118,8 @@ class DQNAgent():
         return action
     
 
-    def learn_replay(self):
-        #Insert Experience replay learning here
+    def learn(self):
+        # Learn from batch of experience . Experience Replay!
         # Start learning as soon as we've filled a batch of memories (to sample from when learning)
         if self.memory_counter < self.batch_size: # 
             return
@@ -155,18 +156,6 @@ class DQNAgent():
         self.target_network.load_state_dict(self.network.state_dict())
         
     
-    def episode(self, env):
-        state, info = env.reset()
-        total_reward = 0
-        terminated = False
-        while not terminated:
-            action = self.action(state)
-            next_state, reward, terminated, truncated, info = env.step(action)
-            #Put Experience Replay Here
-            state = next_state
-            total_reward += reward
-        #self.update_target()
-        return total_reward
     
     def train(self, env, episodes):
         #Add in performance indicators
