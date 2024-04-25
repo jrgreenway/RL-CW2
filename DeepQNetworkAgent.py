@@ -119,8 +119,38 @@ class DQNAgent():
 
     def learn_replay(self):
         #Insert Experience replay learning here
-        pass
-    
+        # Start learning as soon as we've filled a batch of memories (to sample from when learning)
+        if self.memory_counter < self.batch_size: # 
+            return
+        
+        self.Q_eval.optimizer.zero_grad()      # Set up optimizer (Zero the gradients of it)
+
+        max_mem = min(self.memory_counter, self.memory_size)                # Max memory we can use
+        batch = np.random.choice(max_mem, self.batch_size, replace=False)       # Randomly take *batch_size* numbers from range(max_mem)
+        # Batch is an array of indices we will use to sample from memory
+        batch_index = np.arange(self.batch_size, dtype=np.int32)               # Create an array of numbers from 0 to batch_size
+
+        state_batch = T.tensor(self.state_memory[batch]).to(self.Q_eval.device)          # Convert all the bacthes to tensors
+        new_state_batch = T.tensor(self.new_state_memory[batch]).to(self.Q_eval.device)  
+        reward_batch = T.tensor(self.reward_memory[batch]).to(self.Q_eval.device)        
+        terminal_batch = T.tensor(self.terminal_memory[batch]).to(self.Q_eval.device)   
+
+        action_batch = self.action_memory[batch]                                         # Get the actions from the batch
+
+        q_eval = self.Q_eval.forward(state_batch)[batch_index, action_batch]             # Get the Q-values of the actions we took
+        q_next = self.Q_eval.forward(new_state_batch)                                    # Pass a bactch of states into the network to get Q-values for each action in each state
+        q_next[terminal_batch] = 0.0                                                     #  Set Q-values of all terminal states to 0
+
+        loss = self.Q_eval.loss(q_next, q_eval).to(self.Q_eval.device)                    # Mean-squared error between q_next and q_eval
+        loss.backward()       # Backpropagate the loss. Tells us how much the weights of the nn affect the loss. Helps us adjust the weights to minimize loss
+        self.Q_eval.optimizer.step()   # Step the optimizer. Adjust the weights of the nn based on the gradients calculated in the loss.backward() step
+
+        # Decrement epsilon (explore rate)
+        self.epsilon = self.epsilon - self.eps_decay if self.epsilon > self.eps_min else self.eps_min
+
+        
+        
+    # Axel: I havent added a target nn yet
     def update_target(self):
         self.target_network.load_state_dict(self.network.state_dict())
         
