@@ -83,11 +83,6 @@ class DQNAgent():
         self.terminal_memory = np.zeroes(self.memory_size, dtype=np.bool)
         self.new_state_memory = np.zeroes((self.memory_size, *observation_space), dtype=np.float32)
 
-        #Neural Network Training Device
-        #self.device = torch.device("cpu")
-        
-        #Experience Replay
-        #Put Replay Object here
         
         #Policy Network
         #self.network = 
@@ -121,9 +116,6 @@ class DQNAgent():
 
         return action
     
-############################################################################################################
-# This is as far as I got with the implementation. I will continue working on it later. - Axel
-############################################################################################################
 
     def learn_replay(self):
         #Insert Experience replay learning here
