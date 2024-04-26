@@ -6,6 +6,9 @@ import torch.nn as nn               # Neural Network
 import torch.nn.functional as F     # Activation Functions
 import torch.optim as optim         # Optimiser
 import numpy as np                  # Array Manipulation
+# IMport colored
+from termcolor import colored
+
 
 # This inmplementation has no target network or convulutional layers
 # Convulutional layers are used to process the image and extract features from it
@@ -76,10 +79,11 @@ class DQNAgent():
 
         # Experience memory
         # The video guide I(Axel) followed uses multiple arrays instead of a deque. 1 for each experience: (state, action, reward, new_state, terminal?)
-        self.state_memory = np.zeros((self.memory_size, *observation_space), dtype=np.float32)
+        self.state_memory = np.zeros((self.memory_size, *observation_space), dtype=np.float32) ### DEBUGGING: Obersvation_space = [2]
         self.action_memory = np.zeros(self.memory_size, dtype=np.int32)
         self.reward_memory = np.zeros(self.memory_size, dtype=np.float32)
         self.terminal_memory = np.zeros(self.memory_size, dtype=bool)
+        self.truncated_memory = np.zeros(self.memory_size, dtype=bool)
         self.new_state_memory = np.zeros((self.memory_size, *observation_space), dtype=np.float32)
 
         
@@ -138,11 +142,14 @@ class DQNAgent():
 
         action_batch = self.action_memory[batch]                                         # Get the actions from the batch
 
-        q_eval = self.Q_eval.forward(state_batch)[batch_index, action_batch]             # Get the Q-values of the actions we took
-        q_next = self.Q_eval.forward(new_state_batch)                                    # Pass a bactch of states into the network to get Q-values for each action in each state
+
+        q_eval = self.Q_eval.forward(state_batch)[batch_index, action_batch] # Shape [64]  # Get the Q-values of the actions we took
+        q_next = self.Q_eval.forward(new_state_batch) # SHape: [64, 3]                   # Pass a bactch of states into the network to get Q-values for each action in each state
         q_next[terminal_batch] = 0.0                                                     #  Set Q-values of all terminal states to 0
 
-        loss = self.Q_eval.loss(q_next, q_eval).to(self.Q_eval.device)                    # Mean-squared error between q_next and q_eval
+        q_target = reward_batch + self.gamma*T.max(q_next, dim=1)[0]                     # Calculate the target Q-values using the Bellman equation
+        
+        loss = self.Q_eval.loss(q_target, q_eval).to(self.Q_eval.device)                    # Mean-squared error between q_next and q_eval
         loss.backward()       # Backpropagate the loss. Tells us how much the weights of the nn affect the loss. Helps us adjust the weights to minimize loss
         self.Q_eval.optimizer.step()   # Step the optimizer. Adjust the weights of the nn based on the gradients calculated in the loss.backward() step
 
