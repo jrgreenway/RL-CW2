@@ -49,12 +49,11 @@ class DQNAgent():
     # observation_Space = Number of inputs  (same as input_dims)
     # action_space = Number of outputs (like n_actions)
     # hidden_neurons = Number of neurons in the hidden layers (same as fc1_dims and fc2_dims)
-    def __init__(self, learning_rate=0, memory_capacity=0, batch_size=0, observation_space=0, 
-                  n_actions=0, hidden_neurons=128, max_memory_size=100000, epsilon=0.3, eps_decay=5e-4, eps_min=0.01, gamma=0.95) -> None: 
+    def __init__(self, learning_rate, batch_size, observation_space, 
+                  n_actions, gamma, epsilon, max_memory_size=100000, hidden_neurons=64, eps_decay=5e-4, eps_min=0.01) -> None: 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.learning_rate = learning_rate
-        self.memory_capacity = memory_capacity
         self.batch_size = batch_size
         self.observation_space = observation_space
         self.n_actions = n_actions
@@ -77,11 +76,11 @@ class DQNAgent():
 
         # Experience memory
         # The video guide I(Axel) followed uses multiple arrays instead of a deque. 1 for each experience: (state, action, reward, new_state, terminal?)
-        self.state_memory = np.zeroes((self.memory_size, *observation_space), dtype=np.float32)
-        self.action_memory = np.zeroes(self.memory_size, dtype=np.int32)
-        self.reward_memory = np.zeroes(self.memory_size, dtype=np.float32)
-        self.terminal_memory = np.zeroes(self.memory_size, dtype=np.bool)
-        self.new_state_memory = np.zeroes((self.memory_size, *observation_space), dtype=np.float32)
+        self.state_memory = np.zeros((self.memory_size, *observation_space), dtype=np.float32)
+        self.action_memory = np.zeros(self.memory_size, dtype=np.int32)
+        self.reward_memory = np.zeros(self.memory_size, dtype=np.float32)
+        self.terminal_memory = np.zeros(self.memory_size, dtype=bool)
+        self.new_state_memory = np.zeros((self.memory_size, *observation_space), dtype=np.float32)
 
         
         #Policy Network
@@ -104,6 +103,7 @@ class DQNAgent():
         self.new_state_memory[index]  = next_state
         self.terminal_memory[index]   = terminated
         self.truncated_memory[index]  = truncated
+
         self.memory_counter          += 1
         
         
@@ -155,13 +155,4 @@ class DQNAgent():
     def update_target(self):
         self.target_network.load_state_dict(self.network.state_dict())
         
-    
-    
-    def train(self, env, episodes):
-        #Add in performance indicators
-        rewards = []
-        for episode in range(episodes):
-            reward = self.episode(env)
-            rewards.append(reward)
-        return rewards
-    
+
