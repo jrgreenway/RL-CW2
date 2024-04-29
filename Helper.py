@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 #import torch
 #from torch.utils.tensorboard import SummaryWriter
 
+#This currently produces, graphs for each column of data then overrides them if its run again
+
 class Helper():
     def __init__(self, log_dir='logs'):
         #initialise dataframe
@@ -17,7 +19,8 @@ class Helper():
     def add_data(self, data):
         #add data from agent
         new_data = pd.DataFrame.from_dict(data) #add more of these so no matter what form data is given in it can be appended
-        self.data = self.data.append(new_data, ignore_index=True)
+        #self.data = self.data.append(new_data) #ignore_index=True
+        self.data = pd.concat([self.data, new_data], ignore_index=True)
 
     def plot_data(self):
         #convert columns to tensor
@@ -29,10 +32,10 @@ class Helper():
         #self.writer.add_scalar(0, data)
         #add later
 
-        #makes the directory
-        os.makedirs(Learning_Graphs, exist_ok=True)
+        output_dir = "Helper_graphs"
+
         #timestamp for graphs
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        #timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Plot each column against the index and save the graph
         for column in self.data.columns:
@@ -42,27 +45,20 @@ class Helper():
             plt.xlabel('Index')
             plt.ylabel(column)
             plt.grid(True)
-            plt.savefig(f'{Learning_Graphs}{column}_{timestamp}.png')
+            plt.savefig(f'{output_dir}_{column}.png')
             plt.close()
 
     #def close_tensorboard(self):
     #    self.writer.close()
 
-helper = Helper()
+#helper = Helper()
 
 # Adding some data (example)
-data = {'Episode': [1, 2, 3],
-        'Total Reward': [100, 120, 150],
-        'Epsilon': [0.1, 0.08, 0.05],
-        'Loss': [0.5, 0.4, 0.3]}
-helper.add_data(data)
+#data = {'Episode': [1, 2, 3, 4],
+#        'Total Reward': [100, 120, 150, 5],
+#        'Epsilon': [0.1, 0.08, 0.05, 5],
+#        'Loss': [0.5, 0.4, 0.3, 5]}
+#helper.add_data(data)
 
 # Plotting the data
-helper.plot_data()
-
-    
-
-
-
-
-    
+#helper.plot_data()
