@@ -50,14 +50,12 @@ class Helper():
     #def close_tensorboard(self):
     #    self.writer.close()
 
-#helper = Helper()
 
-# Adding some data (example)
+#Test it works:
+#helper = Helper()
 #data = {'Episode': [1, 2, 3, 4],
 #        'Total Reward': [100, 120, 150, 5],
 #        'Epsilon': [0.1, 0.08, 0.05, 5],
 #        'Loss': [0.5, 0.4, 0.3, 5]}
 #helper.add_data(data)
-
-# Plotting the data
 #helper.plot_data()
