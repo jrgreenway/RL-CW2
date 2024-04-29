@@ -6,15 +6,18 @@ import matplotlib.pyplot as plt
 
 class Helper():
     def __init__(self, log_dir='logs'):
-        #init dataframe
+        #initialise dataframe
         self.data = pd.DataFrame()
+        #to put into this function, pd.DataFrame(data) will convert a list data into a dataframe
+
         #init logs for tensor
-        self.writer = SummaryWriter(log_dir=log_dir)
+        #self.writer = SummaryWriter(log_dir=log_dir)
         
 
     def add_data(self, data):
         #add data from agent
-        self.data = self.data.append(data, ignore_index=True)
+        new_data = pd.DataFrame.from_dict(data) #add more of these so no matter what form data is given in it can be appended
+        self.data = self.data.append(new_data, ignore_index=True)
 
     def plot_data(self):
         #convert columns to tensor
@@ -41,7 +44,6 @@ class Helper():
             plt.grid(True)
             plt.savefig(f'{Learning_Graphs}{column}_{timestamp}.png')
             plt.close()
-            print("test")
 
     #def close_tensorboard(self):
     #    self.writer.close()
