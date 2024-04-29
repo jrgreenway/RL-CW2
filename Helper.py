@@ -1,7 +1,8 @@
 import pandas as pd
+#pip install matplotlib if needed
 import matplotlib.pyplot as plt
-import torch
-from torch.utils.tensorboard import SummaryWriter
+#import torch
+#from torch.utils.tensorboard import SummaryWriter
 
 class Helper():
     def __init__(self, log_dir='logs'):
@@ -40,6 +41,7 @@ class Helper():
             plt.grid(True)
             plt.savefig(f'{Learning_Graphs}{column}_{timestamp}.png')
             plt.close()
+            print("test")
 
     #def close_tensorboard(self):
     #    self.writer.close()
