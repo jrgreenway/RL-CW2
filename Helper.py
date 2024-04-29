@@ -4,16 +4,21 @@ from torch.utils.tensorboard import SummaryWriter
 
 class Helper():
     def __init__(self):
+        #init dataframe
         self.data = pd.DataFrame()
+        
 
     def add_data(self, data):
+        #add data from agent
         self.data = self.data.append(data)
 
-    def log_to_tensorboard(self):
-        for i in range(len(self.data[0])):
-            self.writer.add_scalar('Total Reward', self.data['Total Reward'][i], self.data['Episode'][i])
-            self.writer.add_scalar('Epsilon', self.data['Epsilon'][i], self.data['Episode'][i])
-            self.writer.add_scalar('Loss', self.data['Loss'][i], self.data['Episode'][i])
+    def plot_data(self):
+        #convert columns to tensor
+        for column in self.data.columns:
+            tensor_data = torch.tensor(self.data[column].values)
+            self.writer.add_scalar(column, tensor_data)
+
+        self.writer.close()
 
     def close_tensorboard(self):
         self.writer.close()
