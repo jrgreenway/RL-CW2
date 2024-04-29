@@ -34,6 +34,7 @@ class DeepQNetwork(nn.Module):
 
         self.optimizer = optim.Adam(self.parameters(), lr=self.lr)  # Create an Adam optimizer to adjust weights of the nn with the learning rate lr
         self.loss = nn.MSELoss()  # Mean Squared Error Loss function. 2 inputs: input and target. Returns the mean squared error between the input and target
+        print(f"GPU available?" + colored(T.cuda.is_available(), 'green'))
         self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')  # Use GPU if your PC has one (better), if not use CPU
         self.to(self.device)    # Move the nn to the device (GPU or CPU)
 
