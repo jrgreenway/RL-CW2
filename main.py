@@ -42,8 +42,11 @@ for i in tqdm(range(total_episodes)): # Loop through the episodes
         agent.store_transition(state, action, reward, next_state, terminated, truncated) # Store the experience
         agent.learn()                                                       # Learns from the experience
         state = next_state                                                # Update the state 
-        if step_counter % 1000==0: agent.decay()
-        if terminated or truncated: print(colored("Episode terminated or truncated", "red"))
+        if step_counter % 250==0: agent.decay()
+        if terminated or truncated:
+            print(colored("Episode terminated or truncated", "red"))
+            torch.save(agent.network.state_dict(), 'nn_weights.pth')
+            
     scores.append(score)                                     # Episode done. Append the score to the scores list
     eps_history.append(agent.epsilon)                      # Append the epsilon value to the eps_history list, for data analysis
 
