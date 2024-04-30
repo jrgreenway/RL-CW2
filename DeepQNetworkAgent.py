@@ -14,36 +14,57 @@ from termcolor import colored       # Colored text for debugging
 # Target network is basically a copy of the main network that is updated every few steps
 
 class DeepQNetwork(nn.Module):
-    # lr            = learning rate
-    # input_dims    = input dimensions
-    # fc1_dims      = fully connected layer 1 dimensions
-    # fc2_dims      = fully connected layer 2 dimensions
-    # n_actions     = number of actions
-    def __init__(self, lr, input_dims, fc1_dims, fc2_dims, n_actions):
-        super(DeepQNetwork, self).__init__()    # Calls nn.Module __init__ function to set up PyTorch stuff
-        self.lr = lr
+    def __init__(self, lr, input_dims, n_actions):
+        super(DeepQNetwork, self).__init__()
         self.input_dims = input_dims
-        self.fc1_dims = fc1_dims
-        self.fc2_dims = fc2_dims
+        self.lr = lr
         self.n_actions = n_actions
 
-        self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)   # *self.input_dims is the same as self.input_dims[0], self.input_dims[1], etc.
-        self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)      # Create a fully connected layer with fc1_dims inputs and fc2_dims outputs
-        self.fc3 = nn.Linear(self.fc2_dims, self.n_actions)
+        # Define the convolutional layers
+        self.conv1 = nn.Conv2d(self.input_dims[0], 32, 8, stride=4)
+        self.conv2 = nn.Conv2d(32, 64, 4, stride=2)
+        self.conv3 = nn.Conv2d(64, 64, 3, stride=1)
 
-        self.optimizer = optim.Adam(self.parameters(), lr=self.lr)  # Create an Adam optimizer to adjust weights of the nn with the learning rate lr
-        self.loss = nn.MSELoss()  # Mean Squared Error Loss function. 2 inputs: input and target. Returns the mean squared error between the input and target
-        #print(f"GPU available?" + colored(T.cuda.is_available(), 'green'))
-        #self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')  # Use GPU if your PC has one (better), if not use
-        self.device = T.device('cpu')  # Use CPU
-        self.to(self.device)    # Move the nn to the device (GPU or CPU)
+        # Calculate the output dimensions after the convolutional layers
+        self.conv_output_dims = self.calculate_conv_output_dims()
 
-    # We don't need to handle backpropagation manually because PyTorch does it for us
-    # Forward function is called when you pass data through the nn
+        # Define the fully connected layers
+        self.fc1 = nn.Linear(self.conv_output_dims, 512)
+        self.fc2 = nn.Linear(512, self.n_actions)
+
+        self.optimizer = optim.Adam(self.parameters(), lr=self.lr)
+        self.loss = nn.MSELoss()
+        self.device = T.device('cuda:0' if T.cuda.is_available() else 'cpu')
+        self.to(self.device)
+
+    def calculate_conv_output_dims(self):
+        # Create a dummy tensor with the input dimensions
+        dummy = T.zeros((1, *self.input_dims))
+
+        # Pass the dummy tensor through the convolutional layers
+        dummy = self.conv1(dummy)
+        dummy = self.conv2(dummy)
+        dummy = self.conv3(dummy)
+
+        # Return the product of the dimensions of the output tensor
+        return int(np.prod(dummy.size()))
+
     def forward(self, state):
-        x = F.relu(self.fc1(state))     # Pass state into first layer and apply ReLU activation function in each neuron in the layer
-        x = F.relu(self.fc2(x))         # Pass output from 1st layer into 2nd layer
-        actions = self.fc3(x)           # Pass output from 2nd layer into 3rd layer but don't apply action function, just save it
+        # Reshape the state to match the expected input dimensions of the convolutional layers
+        state = state.view(-1, *self.input_dims)
+
+        # Pass the state through the convolutional layers
+        x = F.relu(self.conv1(state))
+        x = F.relu(self.conv2(x))
+        x = F.relu(self.conv3(x))
+
+        # Flatten the output from the convolutional layers
+        x = x.view(x.size()[0], -1)
+
+        # Pass the output through the fully connected layers
+        x = F.relu(self.fc1(x))
+        actions = self.fc2(x)
+
         return actions
     
 
@@ -54,7 +75,7 @@ class DQNAgent():
     # action_space = Number of outputs (like n_actions)
     # hidden_neurons = Number of neurons in the hidden layers (same as fc1_dims and fc2_dims)
     def __init__(self, learning_rate, batch_size, observation_space, 
-                  n_actions, gamma, epsilon, max_memory_size=100000, hidden_neurons=64, eps_decay=5e-4, eps_min=0.01) -> None: 
+                  n_actions, gamma, epsilon, max_memory_size=10000, hidden_neurons=64, eps_decay=0.99999, eps_min=0.01) -> None: 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.learning_rate = learning_rate
@@ -74,8 +95,7 @@ class DQNAgent():
 
         # Q Evaluation Network
         # Hidden neurons defaulted to 128 (for testing)
-        self.Q_eval = DeepQNetwork(self.learning_rate, input_dims=self.observation_space, fc1_dims=self.hidden_neurons,
-                                    fc2_dims=self.hidden_neurons, n_actions=self.n_actions)
+        self.Q_eval = DeepQNetwork(self.learning_rate, input_dims=self.observation_space, n_actions=self.n_actions)
 
 
         # Experience memory
@@ -155,9 +175,11 @@ class DQNAgent():
         self.Q_eval.optimizer.step()   # Step the optimizer. Adjust the weights of the nn based on the gradients calculated in the loss.backward() step
 
         # Decrement epsilon (explore rate)
-        self.epsilon = self.epsilon - self.eps_decay if self.epsilon > self.eps_min else self.eps_min
-
         
+
+    def decay(self):
+        self.epsilon = self.epsilon * self.eps_decay if self.epsilon > self.eps_min else self.eps_min
+
         
     # Axel: I havent added a target nn yet
     def update_target(self):
