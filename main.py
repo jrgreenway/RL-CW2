@@ -45,7 +45,7 @@ for i in tqdm(range(total_episodes)): # Loop through the episodes
         if step_counter % 250==0: agent.decay()
         if terminated or truncated:
             print(colored("Episode terminated or truncated", "red"))
-            torch.save(agent.network.state_dict(), 'nn_weights.pth')
+            torch.save(agent.Q_eval.state_dict(), 'nn_weights.pth')
             
     scores.append(score)                                     # Episode done. Append the score to the scores list
     eps_history.append(agent.epsilon)                      # Append the epsilon value to the eps_history list, for data analysis
