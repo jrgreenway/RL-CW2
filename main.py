@@ -19,12 +19,12 @@ env = gym.make("ALE/Surround-v5", obs_type="grayscale") # "ALE/Surround-v5"  #re
 env = ResizeObservation(env, (42,42))
 env = FrameStack(env, 4)
 agent = DQNAgent(learning_rate=0.003, batch_size=64, observation_space=env.observation_space.shape, \
-                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=5e-4, eps_min=0.01, gamma=0.95)
+                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=0.99, eps_min=0.01, gamma=0.95)
 scores, eps_history = [], []
 total_episodes = 100
 
 
-
+step_counter = 0
 for i in tqdm(range(total_episodes)): # Loop through the episodes
     score = 0
     terminated = False
@@ -35,13 +35,14 @@ for i in tqdm(range(total_episodes)): # Loop through the episodes
         #env.render()
         #if counter % 100 == 0: print(colored(f"State Number: {counter}, Epsilon: {agent.epsilon}", "red"))
         counter += 1
+        step_counter += 1
         action = agent.action(np.array(state))                                        # Agent picks an action
         next_state, reward, terminated, truncated, info = env.step(action)  # Env returns next state, reward, and if it's done
         score += reward                                                     # Total score is updated
         agent.store_transition(state, action, reward, next_state, terminated, truncated) # Store the experience
         agent.learn()                                                       # Learns from the experience
         state = next_state                                                # Update the state 
-        if counter % 10000==0: agent.decay()
+        if step_counter % 1000==0: agent.decay()
         if terminated or truncated: print(colored("Episode terminated or truncated", "red"))
     scores.append(score)                                     # Episode done. Append the score to the scores list
     eps_history.append(agent.epsilon)                      # Append the epsilon value to the eps_history list, for data analysis

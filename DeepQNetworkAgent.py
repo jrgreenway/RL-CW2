@@ -75,7 +75,7 @@ class DQNAgent():
     # action_space = Number of outputs (like n_actions)
     # hidden_neurons = Number of neurons in the hidden layers (same as fc1_dims and fc2_dims)
     def __init__(self, learning_rate, batch_size, observation_space, 
-                  n_actions, gamma, epsilon, max_memory_size=10000, hidden_neurons=64, eps_decay=0.99999, eps_min=0.01) -> None: 
+                  n_actions, gamma, epsilon, max_memory_size=10000, hidden_neurons=64, eps_decay=0.99, eps_min=0.01) -> None: 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.learning_rate = learning_rate
