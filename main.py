@@ -8,12 +8,14 @@ import torch
 
 
 env = gym.make("CartPole-v1") # "ALE/Surround-v5"  #render_mode'human' ?
-agent = DQNAgent(learning_rate=0.003, batch_size=64, observation_space=env.observation_space.shape, \
-                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=5e-4, eps_min=0.01, gamma=0.95)
+agent = DQNAgent(learning_rate=5e-4, batch_size=64, observation_space=env.observation_space.shape, \
+                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=1e-3, eps_min=0.01, gamma=0.95, replace = 100)
 scores, eps_history = [], []
 total_episodes = 100
+load_checkpoint = False
 
-
+if load_checkpoint:
+    agent.load_models()
 
 for i in range(total_episodes): # Loop through the episodes
     score = 0
@@ -40,6 +42,10 @@ for i in range(total_episodes): # Loop through the episodes
     print('episode ', i, 'score %.2f' % score,
             '  average score %.2f' % avg_score,
             ' epsilon %.2f' % agent.epsilon)
+    
+if i > 10 and i % 10 == 0:
+    agent.save_models()
+
 x = [i+1 for i in range(total_episodes)]
-filename = 'lunar_lander.png'
+filename = 'surround.png'
 plotLearning(x, scores, eps_history, filename)
