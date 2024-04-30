@@ -7,11 +7,11 @@ from termcolor import colored
 import torch
 
 
-env = gym.make("ALE/Surround-v5") # "ALE/Surround-v5"  #render_mode'human' ?
+env = gym.make("CartPole-v1") # "ALE/Surround-v5"  #render_mode'human' ?
 agent = DQNAgent(learning_rate=0.003, batch_size=64, observation_space=env.observation_space.shape, \
                   n_actions=env.action_space.n, epsilon=1.0, eps_decay=5e-4, eps_min=0.01, gamma=0.95)
 scores, eps_history = [], []
-total_episodes = 3
+total_episodes = 100
 
 
 
