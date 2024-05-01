@@ -1,5 +1,6 @@
 import gymnasium as gym 
 import numpy as np
+from tqdm import tqdm
 from DeepQNetworkAgent import DQNAgent
 from matplotlib import pyplot as plt
 from grapher import Grapher
@@ -8,9 +9,10 @@ from termcolor import colored
 import torch
 
 
-env = gym.make("CartPole-v1") # "ALE/Surround-v5"  #render_mode'human' ?
+env = gym.make("ALE/Surround-v5", obs_type='ram') # "ALE/Surround-v5"  #render_mode'human' ?
+
 agent = DQNAgent(learning_rate=5e-4, batch_size=64, observation_space=env.observation_space.shape, \
-                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=1e-3, eps_min=0.01, gamma=0.95, replace = 50)
+                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=0.99, eps_min=0.01, gamma=0.95, replace = 50)
 scores, eps_history = [], []
 total_episodes = 250
 load_checkpoint = False
@@ -20,7 +22,7 @@ data_store = Grapher()
 if load_checkpoint:
     agent.load_models()
 
-for i in range(total_episodes): # Loop through the episodes
+for i in tqdm(range(total_episodes)): # Loop through the episodes
     score = 0
     terminated = False
     truncated = False   # Truncated is for time limits when time is not part of the observation space / state

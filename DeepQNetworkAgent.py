@@ -138,7 +138,7 @@ class DQNAgent():
          
     def action(self, observation): # Chooses action
         if np.random.random(1) > self.epsilon: # Best action (Exploitation)
-            state = T.tensor([observation], dtype=T.float).to(self.Q_eval.device) # Convert state to tensor,prepare Q_eval for preprocessing
+            state = T.tensor(np.array(observation), dtype=T.float).to(self.Q_eval.device) # Convert state to tensor,prepare Q_eval for preprocessing
             _, advantage = self.Q_eval.forward(state) # Push state through network and get advantage function
             # actions = self.Q_eval.forward(state) # actions is all the Q-value outputs from the network after a forward pass
             action = T.argmax(advantage).item() # Get the action with the highest advantage
@@ -208,7 +208,8 @@ class DQNAgent():
         self.learn_step_counter += 1
 
         # Decrement epsilon (explore rate)
-        self.epsilon = self.epsilon - self.eps_decay if self.epsilon > self.eps_min else self.eps_min
+        if self.learn_step_counter % 1000 == 0:
+            self.epsilon = max(self.epsilon * self.eps_decay, self.eps_min) 
 
         
         
