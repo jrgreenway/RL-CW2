@@ -2,6 +2,7 @@ import gymnasium as gym
 import numpy as np
 from DeepQNetworkAgent import DQNAgent
 from matplotlib import pyplot as plt
+from grapher import Grapher
 from utils import plotLearning 
 from termcolor import colored
 import torch
@@ -13,6 +14,8 @@ agent = DQNAgent(learning_rate=5e-4, batch_size=64, observation_space=env.observ
 scores, eps_history = [], []
 total_episodes = 250
 load_checkpoint = False
+data_store = Grapher()
+
 
 if load_checkpoint:
     agent.load_models()
