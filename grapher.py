@@ -26,6 +26,9 @@ class Grapher():
         #self.data = self.data.append(new_data) #ignore_index=True
         self.data = pd.concat([self.data, new_data], ignore_index=True)
 
+    def savetocsv(self,path):
+        self.data.to_csv(f'{path}')
+
     def plot_data(self):
         #convert columns to tensor
         #for column in self.data.columns:
