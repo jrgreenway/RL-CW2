@@ -1,7 +1,7 @@
 import pandas as pd
 #pip install matplotlib if needed
 import matplotlib.pyplot as plt
-import datetime
+from datetime import datetime
 #import torch
 #from torch.utils.tensorboard import SummaryWriter
 
@@ -38,7 +38,9 @@ class Helper():
         output_dir = "Helper_graphs"
 
         #timestamp for graphs
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nowtimestamp = datetime.now()
+        timestamp = nowtimestamp.strftime("%d_%m,%H_%M_%S")
+        print(datetime.now().strftime("%d_%m,%H_%M_%S"))
 
         # Plot each column against the index and save the graph
         for column in self.data.columns:
@@ -48,7 +50,7 @@ class Helper():
             plt.xlabel('Index')
             plt.ylabel(column)
             plt.grid(True)
-            plt.savefig(f'{output_dir}_{timestamp}_{column}.png')
+            plt.savefig(f'{output_dir}_{timestamp}{column}.png')
             plt.close()
 
     #def close_tensorboard(self):
@@ -56,10 +58,10 @@ class Helper():
 
 
 #Test it works:
-#helper = Helper()
-#data = {'Episode': [1, 2, 3, 4],
-#        'Total Reward': [100, 120, 150, 5],
-#        'Epsilon': [0.1, 0.08, 0.05, 5],
-#        'Loss': [0.5, 0.4, 0.3, 5]}
-#helper.add_data(data)
-#helper.plot_data()
+helper = Helper()
+data = {'Episode': [1, 2, 3, 4],
+        'Total Reward': [100, 120, 150, 5],
+        'Epsilon': [0.1, 0.08, 0.05, 5],
+        'Loss': [0.5, 0.4, 0.3, 5]}
+helper.add_data(data)
+helper.plot_data()
