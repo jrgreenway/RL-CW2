@@ -1,6 +1,7 @@
 import pandas as pd
 #pip install matplotlib if needed
 import matplotlib.pyplot as plt
+import datetime
 #import torch
 #from torch.utils.tensorboard import SummaryWriter
 
@@ -31,10 +32,13 @@ class Helper():
         #self.writer.add_scalar(0, data)
         #add later
 
+        #if not os.path.exists(output_dir):
+        #    os.makedirs(output_dir)
+
         output_dir = "Helper_graphs"
 
         #timestamp for graphs
-        #timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
         # Plot each column against the index and save the graph
         for column in self.data.columns:
@@ -44,7 +48,7 @@ class Helper():
             plt.xlabel('Index')
             plt.ylabel(column)
             plt.grid(True)
-            plt.savefig(f'{output_dir}_{column}.png')
+            plt.savefig(f'{output_dir}_{timestamp}_{column}.png')
             plt.close()
 
     #def close_tensorboard(self):
