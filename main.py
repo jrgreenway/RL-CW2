@@ -18,8 +18,8 @@ env = ResizeObservation(env, RESIZE)
 env = FrameStack(env, FRAMES)
 observation_space = env.observation_space.shape
 observation_space = (observation_space[0], 1, *observation_space[1:]) #to be in form (N,C,H,W), batch,channel, height, width
-agent = DQNAgent(learning_rate=0.003, batch_size=16, observation_space=observation_space,
-                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=0.99, eps_min=0.01, gamma=0.95)
+agent = DQNAgent(learning_rate=0.003, batch_size=32, observation_space=observation_space,
+                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=0.99, eps_min=0.01, gamma=0.99)
 scores, eps_history = [], []
 total_episodes = 100
 
@@ -43,7 +43,7 @@ for i in tqdm(range(total_episodes)): # Loop through the episodes
         next_state = preprocess(next_state)
         score += reward                                                     # Total score is updated
         agent.store_transition(state, action, reward, next_state, terminated, truncated) # Store the experience
-        agent.learn()                                                       # Learns from the experience
+        if step_counter % 5==0: agent.learn() # Learns from the experience
         state = next_state
         if reward > 0: round+=0
         if step_counter % 1000==0: agent.decay()
