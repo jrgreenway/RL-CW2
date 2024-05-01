@@ -39,8 +39,7 @@ class Helper():
 
         #timestamp for graphs
         nowtimestamp = datetime.now()
-        timestamp = nowtimestamp.strftime("%d_%m,%H_%M_%S")
-        print(datetime.now().strftime("%d_%m,%H_%M_%S"))
+        timestamp = nowtimestamp.strftime("%m_%d,%H_%M_%S")
 
         # Plot each column against the index and save the graph
         for column in self.data.columns:
@@ -58,10 +57,10 @@ class Helper():
 
 
 #Test it works:
-helper = Helper()
-data = {'Episode': [1, 2, 3, 4],
-        'Total Reward': [100, 120, 150, 5],
-        'Epsilon': [0.1, 0.08, 0.05, 5],
-        'Loss': [0.5, 0.4, 0.3, 5]}
-helper.add_data(data)
-helper.plot_data()
+#helper = Helper()
+#data = {'Episode': [1, 2, 3, 4],
+#        'Total Reward': [100, 120, 150, 5],
+#        'Epsilon': [0.1, 0.08, 0.05, 5],
+#        'Loss': [0.5, 0.4, 0.3, 5]}
+#helper.add_data(data)
+#helper.plot_data()
