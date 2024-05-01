@@ -18,7 +18,11 @@ class Helper():
     def add_data(self, data):
         #add data from agent
         #if self.data is an object etc...
-        new_data = pd.DataFrame.from_dict(data) #add more of these so no matter what form data is given in, it can be appended
+        #new_data = pd.DataFrame.from_dict(data) #add more of these so no matter what form data is given in, it can be appended
+        if isinstance(data, dict):
+            new_data = pd.DataFrame.from_dict(data)
+        else:
+            new_data = pd.DataFrame(data)
         #self.data = self.data.append(new_data) #ignore_index=True
         self.data = pd.concat([self.data, new_data], ignore_index=True)
 
