@@ -202,7 +202,7 @@ class DQNAgent():
 
         #q_target = reward_batch + self.gamma*T.max(q_next, dim=1)[0]                     # Calculate the target Q-values using the Bellman equation
         
-        loss = self.Q_eval.loss(q_target, q_eval).to(self.Q_eval.device)                    # Mean-squared error between q_next and q_eval
+        loss = self.Q_eval.loss(q_target, q_pred).to(self.Q_eval.device)                    # Mean-squared error between q_next and q_eval
         loss.backward()       # Backpropagate the loss. Tells us how much the weights of the nn affect the loss. Helps us adjust the weights to minimize loss
         self.Q_eval.optimizer.step()   # Step the optimizer. Adjust the weights of the nn based on the gradients calculated in the loss.backward() step
         self.learn_step_counter += 1
