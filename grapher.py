@@ -7,7 +7,7 @@ from datetime import datetime
 
 #This currently produces, graphs for each column of data then overrides them if its run again
 
-class Helper():
+class Grapher():
     def __init__(self, log_dir='logs'):
         #initialise dataframe
         self.data = pd.DataFrame()
