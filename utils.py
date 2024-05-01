@@ -1,4 +1,5 @@
 '''
+James - Suggest Using this file for all general utils too.
 Found here: https://github.com/celsod/DDQN_Phil_Tabor/blob/master/utils.py
 '''
 
@@ -14,6 +15,20 @@ Twitter: https://twitter.com/mlwithphil
 
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+
+
+def normalise(input:np.ndarray):
+    '''Normalises Pixel inputs to be between 0 and 1'''
+    return input / 255
+    
+def preprocess(input) -> np.ndarray:
+    '''Preprocesses state observations'''
+    state = np.array(input)
+    state = normalise(state) # Normalises pixel values between 0 and 1
+    state = np.expand_dims(state, axis=1) # Adds a channel dimension for CNN
+    return state
+    
 
 
 def plotLearning(x, scores, epsilons, filename):

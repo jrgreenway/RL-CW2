@@ -39,7 +39,7 @@ class DeepQNetwork(nn.Module):
 
     def calculate_conv_output_dims(self):
         # Create a dummy tensor with the input dimensions
-        dummy = T.zeros((1, *self.input_dims))
+        dummy = T.zeros(1,*self.input_dims)
 
         # Pass the dummy tensor through the convolutional layers
         dummy = self.conv1(dummy)
@@ -51,7 +51,7 @@ class DeepQNetwork(nn.Module):
 
     def forward(self, state):
         # Reshape the state to match the expected input dimensions of the convolutional layers
-        state = state.view(-1, *self.input_dims)
+        #state = state.view(-1, *self.input_dims)
 
         # Pass the state through the convolutional layers
         x = F.relu(self.conv1(state))
@@ -75,9 +75,10 @@ class DQNAgent():
     # action_space = Number of outputs (like n_actions)
     # hidden_neurons = Number of neurons in the hidden layers (same as fc1_dims and fc2_dims)
     def __init__(self, learning_rate, batch_size, observation_space, 
-                  n_actions, gamma, epsilon, max_memory_size=10000, hidden_neurons=64, eps_decay=0.99, eps_min=0.01) -> None: 
+                  n_actions, gamma, epsilon, max_memory_size=10000, hidden_neurons=64, eps_decay=0.99, eps_min=0.01, frames=4) -> None: 
         # Adjust epsilon decay rate later, right now linear decay
 
+        self.frames = frames
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.observation_space = observation_space
@@ -95,7 +96,7 @@ class DQNAgent():
 
         # Q Evaluation Network
         # Hidden neurons defaulted to 128 (for testing)
-        self.Q_eval = DeepQNetwork(self.learning_rate, input_dims=self.observation_space, n_actions=self.n_actions)
+        self.Q_eval = DeepQNetwork(self.learning_rate, input_dims=self.observation_space[1:], n_actions=self.n_actions)
 
 
         # Experience memory
@@ -132,9 +133,9 @@ class DQNAgent():
         self.memory_counter          += 1
         
         
-    def action(self, state): # Chooses action
+    def action(self, observation): # Chooses action
         if np.random.random(1) > self.epsilon: # Best action (Exploitation)
-            state = T.tensor(state, dtype=T.float).to(self.Q_eval.device) # Convert state to tensor,prepare Q_eval for preprocessing
+            state = T.tensor(observation, dtype=T.float).to(self.Q_eval.device) # Convert state to tensor,prepare Q_eval for preprocessing
             actions = self.Q_eval.forward(state) # actions is all the Q-value outputs from the network after a forward pass
             action = T.argmax(actions).item() # Get the action with the highest Q-value in actions
         else: # Random action (Exploration)
@@ -154,17 +155,18 @@ class DQNAgent():
         max_mem = min(self.memory_counter, self.memory_size)                # Max memory we can use
         batch = np.random.choice(max_mem, self.batch_size, replace=False)       # Randomly take *batch_size* numbers from range(max_mem)
         # Batch is an array of indices we will use to sample from memory
-        batch_index = np.arange(self.batch_size, dtype=np.int32)               # Create an array of numbers from 0 to batch_size
+                      # Create an array of numbers from 0 to batch_size
 
-        state_batch = T.tensor(self.state_memory[batch]).to(self.Q_eval.device)          # Convert all the bacthes to tensors
-        new_state_batch = T.tensor(self.new_state_memory[batch]).to(self.Q_eval.device)  
-        reward_batch = T.tensor(self.reward_memory[batch]).to(self.Q_eval.device)        
-        terminal_batch = T.tensor(self.terminal_memory[batch]).to(self.Q_eval.device)   
+        state_batch = T.tensor(self.state_memory[batch]).to(self.Q_eval.device).reshape(-1, *self.state_memory[batch].shape[2:])         # Convert all the bacthes to tensors
+        new_state_batch = T.tensor(self.new_state_memory[batch]).to(self.Q_eval.device).reshape(-1, *self.new_state_memory[batch].shape[2:])  
+        reward_batch = T.tensor(self.reward_memory[batch]).to(self.Q_eval.device).repeat_interleave(self.frames)        
+        terminal_batch = T.tensor(self.terminal_memory[batch]).to(self.Q_eval.device).repeat_interleave(self.frames)   
 
-        action_batch = self.action_memory[batch]                                         # Get the actions from the batch
-
-
-        q_eval = self.Q_eval.forward(state_batch)[batch_index, action_batch] # Shape [64]  # Get the Q-values of the actions we took
+        action_batch = T.tensor(self.action_memory[batch]).to(self.Q_eval.device)
+        action_batch_repeated = action_batch.repeat_interleave(self.frames)
+        batch_index_grouped = T.arange(self.batch_size*self.frames).to(self.Q_eval.device)
+        
+        q_eval = self.Q_eval.forward(state_batch)[batch_index_grouped, action_batch_repeated] # Shape [64]  # Get the Q-values of the actions we took
         q_next = self.Q_eval.forward(new_state_batch) # SHape: [64, 3]                   # Pass a bactch of states into the network to get Q-values for each action in each state
         q_next[terminal_batch] = 0.0                                                     #  Set Q-values of all terminal states to 0
 
@@ -178,11 +180,11 @@ class DQNAgent():
         
 
     def decay(self):
-        self.epsilon = self.epsilon * self.eps_decay if self.epsilon > self.eps_min else self.eps_min
+        self.epsilon = max(self.epsilon * self.eps_decay, self.eps_min)
 
         
     # Axel: I havent added a target nn yet
-    def update_target(self):
-        self.target_network.load_state_dict(self.network.state_dict())
+    # def update_target(self):
+    #     self.target_network.load_state_dict(self.network.state_dict())
         
 
