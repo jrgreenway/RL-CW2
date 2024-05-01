@@ -12,7 +12,7 @@ import torch
 env = gym.make("ALE/Surround-v5", obs_type='ram') # "ALE/Surround-v5"  #render_mode'human' ?
 
 agent = DQNAgent(learning_rate=5e-4, batch_size=64, observation_space=env.observation_space.shape, \
-                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=0.99, eps_min=0.01, gamma=0.95, replace = 50)
+                  n_actions=env.action_space.n, epsilon=1.0, eps_decay=0.99, eps_min=0.1, gamma=0.95, replace = 50)
 scores, eps_history = [], []
 total_episodes = 250
 load_checkpoint = False
