@@ -102,7 +102,7 @@ class DuelingDeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, max_memory_size=100000, hidden_neurons=64, eps_decay=0.995, eps_min=0.1, replace=1000, checkpoint_dir='tmp/'): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, max_memory_size=100000, hidden_neurons=64, eps_decay=0.9995, eps_min=0.1, replace=1000, checkpoint_dir='tmp/'): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -216,8 +216,11 @@ class DQNAgent():
                 action = self.action(state)
                 next_state, reward, terminated, truncated, _ = self.env.step(action)
                 state = next_state
-                score += reward
                 done = terminated or truncated
+                if not done:
+                    reward += 0.01
+                score += reward
+                
                 if not self.testing:
                     self.transition += [reward, next_state, done]
                     self.memory.store_transition(*self.transition)
