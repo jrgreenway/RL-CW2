@@ -1,5 +1,6 @@
 #Imports
 #from DQN import DQN #Change According to NN naming
+import math
 import torch as T
 import torch.nn as nn               # Neural Network (nn)
 # We may need to import something for convulutional layers because we are working with images
@@ -14,7 +15,7 @@ import os                           # For file joining operations to handle mode
 # Target network is basically a copy of the main network that is updated every few steps
 
 # 
-class NoisyLinear():
+class NoisyLinear(nn.Module):
     # in_features = Number of input features
     # out_features= Number of output features
     # sigma_init  = Initial sigma (standard deviation) parameter
@@ -24,16 +25,36 @@ class NoisyLinear():
         self.out_features = out_features
         self.sigma_init = sigma_init
 
-        self.weight_mu = nn.Parameter(T.empty(out_features, in_features))
-        self.weight_sigma = nn.Parameter(T.empty(out_features, in_features))
-        self.register_buffer('weight_epsilon', T.empty(out_features, in_features))
+        # Make these tensors as opposed to empties?
+        self.weight_mu = nn.Parameter(T.empty(out_features, in_features)) # Mean value weight parameter
+        self.weight_sigma = nn.Parameter(T.empty(out_features, in_features)) # Standard Deviation value weight parameter
+        self.register_buffer('weight_epsilon', T.empty(out_features, in_features)) # Buffer that holds noise values added to weights during training
 
-        self.bias_mu = nn.Parameter(T.empty(out_features))
-        self.bias_sigma = nn.Parameter(T.empty(out_features))
-        self.register_buffer('bias_epsilon', T.empty(out_features))
+        self.bias_mu = nn.Parameter(T.empty(out_features)) # Mean value bias parameter
+        self.bias_sigma = nn.Parameter(T.empty(out_features)) # Standard Deviation value bias parameter
+        self.register_buffer('bias_epsilon', T.empty(out_features)) # Buffer that holds noise values added to biases during training
 
         self.reset_parameters()
         self.reset_noise()
+
+    def reset_parameters(self):
+        mu_range = 1 / math.sqrt(self.in_features)
+        self.weight_mu.data.uniform_(-mu_range, mu_range)
+        self.weight_sigma.data.fill_(self.sigma_init / math.sqrt(self.in_features))
+        self.bias_mu.data.uniform_(-mu_range, mu_range)
+        self.bias_sigma.data.fill_(self.sigma_init / math.sqrt(self.out_features))
+
+    def reset_noise(self):
+        epsilon_in = self.scale_noise(self.in_features)
+        epsilon_out = self.scale_noise(self.out_features)
+
+        self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in))
+        self.bias_epsilon.copy_(epsilon_out)
+
+    def scale_noise(self, size):
+        x = torch.randn(size)
+        x = x.sign().mul(x.abs().sqrt())
+        return x
     
 
 class DuelingDeepQNetwork(nn.Module):
