@@ -38,21 +38,31 @@ class NoisyLinear(nn.Module):
         self.reset_noise()
 
     def reset_parameters(self):
+        # Reset the learnable network parameters (mu and sigma), 
+        # Uses factorized gaussian noise, more computationally efficient
+        # The below are just ranges that are reasonable and a value is chosen from them to initialise mu and sigma
+        # These ranges could be changed but are probably the most reasonable
         mu_range = 1 / math.sqrt(self.in_features)
-        self.weight_mu.data.uniform_(-mu_range, mu_range)
+        self.weight_mu.data.uniform_(-mu_range, mu_range) # Chooses with equal chance a value in the range
         self.weight_sigma.data.fill_(self.sigma_init / math.sqrt(self.in_features))
         self.bias_mu.data.uniform_(-mu_range, mu_range)
         self.bias_sigma.data.fill_(self.sigma_init / math.sqrt(self.out_features))
 
     def reset_noise(self):
+        # The scale_noise() method generates noise vectors by sampling from a 
+        # factorized Gaussian distribution with mean 0 and standard deviation 1, 
+        # and then scales the noise vectors according to the size of the input or output features.
+        # 
         epsilon_in = self.scale_noise(self.in_features)
         epsilon_out = self.scale_noise(self.out_features)
 
-        self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in))
+        # ger gives the outer product of the epsilon out and the epsilon in
+        self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in)) 
         self.bias_epsilon.copy_(epsilon_out)
 
+    # Missing forward right now....
     def scale_noise(self, size):
-        x = torch.randn(size)
+        x = T.randn(size)
         x = x.sign().mul(x.abs().sqrt())
         return x
     
