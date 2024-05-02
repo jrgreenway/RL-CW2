@@ -13,6 +13,45 @@ import os                           # For file joining operations to handle mode
 # Convulutional layers are used to process the image and extract features from it
 # Target network is basically a copy of the main network that is updated every few steps
 
+
+class ReplayMemory():
+    def __init__(self, observation_dims, memory_size, batch_size):
+        # Experience memory
+        self.batch_size = batch_size
+        self.memory_size = memory_size
+        self.memory_index = 0
+        self.size = 0
+        self.state_memory = np.zeros((memory_size, observation_dims), dtype=np.float32)
+        self.next_state_memory = np.zeros((memory_size, observation_dims), dtype=np.float32)
+        self.action_memory = np.zeros((memory_size), dtype=np.int32)
+        self.reward_memory = np.zeros((memory_size), dtype=np.float32)
+        self.done_memory = np.zeros(memory_size, dtype=bool)
+        
+
+
+    
+    def store_transition(self, state, action, reward, next_state, terminated, truncated):
+        #Store transitions in memory so that we can use them for experience replay   
+        self.state_memory[self.memory_index] = state
+        self.action_memory[self.memory_index] = action
+        self.reward_memory[self.memory_index] = reward
+        self.new_state_memory[self.memory_index] = next_state
+        self.done_memory[self.memory_index] = terminated
+        self.memory_index = (self.memory_index + 1) % self.max_size
+        self.size = min(self.size + 1, self.max_size)
+    
+    def sample_batch(self):
+        #Returns a batch of random experiences of size batch_size
+        batch_indexes = np.random.choice(self.size, size=self.batch_size, replace=False)
+        return dict(states=self.state_memory[batch_indexes], 
+                    next_states=self.next_state_memory[batch_indexes],
+                    actions=self.action_memory[batch_indexes],
+                    rewards=self.reward_memory[batch_indexes],
+                    dones=self.done_memory[batch_indexes])
+
+    def __len__(self):
+        return self.size
+
 class DuelingDeepQNetwork(nn.Module):
     # lr            = learning rate
     # input_dims    = input dimensions
