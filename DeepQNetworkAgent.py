@@ -23,6 +23,17 @@ class NoisyLinear():
         self.in_features = in_features
         self.out_features = out_features
         self.sigma_init = sigma_init
+
+        self.weight_mu = nn.Parameter(T.empty(out_features, in_features))
+        self.weight_sigma = nn.Parameter(T.empty(out_features, in_features))
+        self.register_buffer('weight_epsilon', T.empty(out_features, in_features))
+
+        self.bias_mu = nn.Parameter(T.empty(out_features))
+        self.bias_sigma = nn.Parameter(T.empty(out_features))
+        self.register_buffer('bias_epsilon', T.empty(out_features))
+
+        self.reset_parameters()
+        self.reset_noise()
     
 
 class DuelingDeepQNetwork(nn.Module):
