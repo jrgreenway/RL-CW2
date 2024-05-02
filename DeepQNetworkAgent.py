@@ -13,6 +13,15 @@ import os                           # For file joining operations to handle mode
 # Convulutional layers are used to process the image and extract features from it
 # Target network is basically a copy of the main network that is updated every few steps
 
+# 
+class NoisyLinear():
+    # in_features = Number of input features
+    # out_features= Number of output features
+    # sigma_init  = Initial sigma (standard deviation) parameter
+    def __init__(self,in_features, out_features, sigmsa_init=0.017):
+        super(NoisyLinear, self).__init__()
+    
+
 class DuelingDeepQNetwork(nn.Module):
     # lr            = learning rate
     # input_dims    = input dimensions
@@ -62,7 +71,6 @@ class DuelingDeepQNetwork(nn.Module):
     def load_checkpoint(self, file):
         print('... loading checkpoint ...')
         self.load_state_dict(T.load(self.checkpoint_file))
-    
 
 
 class DQNAgent():
