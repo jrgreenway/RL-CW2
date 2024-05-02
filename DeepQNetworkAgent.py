@@ -18,8 +18,11 @@ class NoisyLinear():
     # in_features = Number of input features
     # out_features= Number of output features
     # sigma_init  = Initial sigma (standard deviation) parameter
-    def __init__(self,in_features, out_features, sigmsa_init=0.017):
+    def __init__(self,in_features, out_features, sigma_init=0.017):
         super(NoisyLinear, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.sigma_init = sigma_init
     
 
 class DuelingDeepQNetwork(nn.Module):
