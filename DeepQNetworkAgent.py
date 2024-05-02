@@ -49,9 +49,6 @@ class NoisyLinear(nn.Module):
         self.bias_sigma.data.fill_(self.sigma_init / math.sqrt(self.out_features))
 
     def reset_noise(self):
-        # The scale_noise() method generates noise vectors by sampling from a 
-        # factorized Gaussian distribution with mean 0 and standard deviation 1, 
-        # and then scales the noise vectors according to the size of the input or output features.
         # 
         epsilon_in = self.scale_noise(self.in_features)
         epsilon_out = self.scale_noise(self.out_features)
@@ -61,6 +58,11 @@ class NoisyLinear(nn.Module):
         self.bias_epsilon.copy_(epsilon_out)
 
     # Missing forward right now....
+
+    # The scale_noise() method generates noise vectors by sampling from a 
+    # factorized Gaussian distribution with mean 0 and standard deviation 1, 
+    # and then scales the noise vectors according to the size of the input or output features.
+    # 
     def scale_noise(self, size):
         x = T.randn(size)
         x = x.sign().mul(x.abs().sqrt())
