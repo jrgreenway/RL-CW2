@@ -62,10 +62,9 @@ class NoisyLinear(nn.Module):
     # The scale_noise() method generates noise vectors by sampling from a 
     # factorized Gaussian distribution with mean 0 and standard deviation 1, 
     # and then scales the noise vectors according to the size of the input or output features.
-    # 
     def scale_noise(self, size):
-        x = T.randn(size)
-        x = x.sign().mul(x.abs().sqrt())
+        x = T.randn(size) # Noise tensor with random values from a standard normal distribution (mean=0, standard deviation=1).
+        x = x.sign().mul(x.abs().sqrt()) #The sign(-1,1 or 0) of x multiplied by the square root of the absolute value of x
         return x
     
 
