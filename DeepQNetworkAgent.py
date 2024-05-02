@@ -57,8 +57,17 @@ class NoisyLinear(nn.Module):
         self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in)) 
         self.bias_epsilon.copy_(epsilon_out)
 
-    # Missing forward right now....
-
+    # This is the main method, this take all of the parameters and uses them
+    # to create a noisy linear layer of a nueral network
+    # This should replace the forward use in a linear network
+    # This is done in DuelingDeepQNetwork in self.fc1 onward
+    def forward(self, x: T.Tensor) -> T.Tensor:
+        return F.linear(
+            x,
+            self.weight_mu + self.weight_sigma * self.weight_epsilon,
+            self.bias_mu + self.bias_sigma * self.bias_epsilon,
+        )
+    
     # The scale_noise() method generates noise vectors by sampling from a 
     # factorized Gaussian distribution with mean 0 and standard deviation 1, 
     # and then scales the noise vectors according to the size of the input or output features.
@@ -85,9 +94,10 @@ class DuelingDeepQNetwork(nn.Module):
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name)  # Save our checkpoint directory for later use
 
-        self.fc1 = nn.Linear(*self.input_dims, self.fc1_dims)   # *self.input_dims is the same as self.input_dims[0], self.input_dims[1], etc.
-        self.V = nn.Linear(fc1_dims, 1)             # Value stream: tells the agent theh value of thhe current state
-        self.A = nn.Linear(fc1_dims, n_actions)     # Advantage stream: tells the agent the relative advantage of eachh action in a given state
+        # NOISY LINEAR ADDED IN HERE
+        self.fc1 = NoisyLinear(*self.input_dims, self.fc1_dims)   # *self.input_dims is the same as self.input_dims[0], self.input_dims[1], etc.
+        self.V = NoisyLinear(fc1_dims, 1)             # Value stream: tells the agent theh value of thhe current state
+        self.A = NoisyLinear(fc1_dims, n_actions)     # Advantage stream: tells the agent the relative advantage of eachh action in a given state
         #self.fc2 = nn.Linear(self.fc1_dims, self.fc2_dims)      # Create a fully connected layer with fc1_dims inputs and fc2_dims outputs
         #self.fc3 = nn.Linear(self.fc2_dims, self.n_actions)
 
