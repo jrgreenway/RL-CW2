@@ -49,7 +49,7 @@ class NoisyLinear(nn.Module):
         self.bias_sigma.data.fill_(self.sigma_init / math.sqrt(self.out_features))
 
     def reset_noise(self):
-        # 
+        # Applies the scale noise to make new noise to be used
         epsilon_in = self.scale_noise(self.in_features)
         epsilon_out = self.scale_noise(self.out_features)
 
