@@ -9,7 +9,7 @@ from termcolor import colored
 import torch
 
 
-env = gym.make("CartPole-v1", render_mode='rgb_array') # "ALE/Surround-v5"  #render_mode'human' ?
+env = gym.make("ALE/Surround-v5", obs_type='ram') # "ALE/Surround-v5"  #render_mode'human' ?
 
 agent = DQNAgent(env, 0.003, 64, 0.95, 1)
 total_episodes = 250
