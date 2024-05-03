@@ -196,26 +196,32 @@ class DuelingDeepQNetwork(nn.Module):
             nn.Linear(nn_dims, n_actions)
         )'''
 
-    def forward(self, state):
+    def forward(self, x: T.tensor):
+        dist = self.dist(x)
+        q = T.sum(dist * self.support, dim=2)
+
+        return q
+        ''' state instead of tensor
         x = self.feature(state)
         V = self.V(x)
         A = self.A(x)
         return V + A - A.mean(dim=-1, keepdim=True)
+        '''
     
     def dist(self, x: T.Tensor) -> T.Tensor:
-        """Get distribution for atoms."""
+        """Distribution"""
         feature = self.feature_layer(x)
-        adv_hid = F.relu(self.A_hidden_layer(feature))
-        val_hid = F.relu(self.V_hidden_layer(feature))
+        A_hid = F.relu(self.A_hidden_layer(feature))
+        V_hid = F.relu(self.V_hidden_layer(feature))
         
-        advantage = self.A_layer(adv_hid).view(
+        advantage = self.A_layer(A_hid).view(
             -1, self.output_dims, self.atom_size
         )
-        value = self.V_layer(val_hid).view(-1, 1, self.atom_size)
+        value = self.V_layer(V_hid).view(-1, 1, self.atom_size)
         q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
         
         dist = F.softmax(q_atoms, dim=-1)
-        dist = dist.clamp(min=1e-3)  # for avoiding nans
+        dist = dist.clamp(min=1e-3)  # for avoiding nans, needed?
         
         return dist
     
@@ -320,7 +326,7 @@ class DQNAgent():
         self.memory.update(batches["indices"], new_priorities)
         return loss.item()
 
-    def calculate_loss(self, samples):
+    def calculate_loss(self, samples, gamma):
         """loss function to simplify learn() function"""
         state = T.FloatTensor(samples["states"]).to(self.device)
         next_state = T.FloatTensor(samples["next_states"]).to(self.device)
@@ -329,7 +335,44 @@ class DQNAgent():
         done = T.FloatTensor(samples["dones"].reshape(-1, 1)).to(self.device)
 
         '''Categorical DQN changes'''
+        delta_z = float(self.v_max - self.v_min) / (self.atom_size - 1)
 
+        with T.no_grad():
+            # Double DQN
+            next_action = self.dqn(next_state).argmax(1)
+            next_dist = self.dqn_target.dist(next_state)
+            next_dist = next_dist[range(self.batch_size), next_action]
+
+            t_z = reward + (1 - done) * gamma * self.support
+            t_z = t_z.clamp(min=self.v_min, max=self.v_max)
+            b = (t_z - self.v_min) / delta_z
+            l = b.floor().long()
+            u = b.ceil().long()
+
+            offset = (
+                T.linspace(
+                    0, (self.batch_size - 1) * self.atom_size, self.batch_size
+                ).long()
+                .unsqueeze(1)
+                .expand(self.batch_size, self.atom_size)
+                .to(self.device)
+            )
+
+            proj_dist = T.zeros(next_dist.size(), device=self.device)
+            proj_dist.view(-1).index_add_(
+                0, (l + offset).view(-1), (next_dist * (u.float() - b)).view(-1)
+            )
+            proj_dist.view(-1).index_add_(
+                0, (u + offset).view(-1), (next_dist * (b - l.float())).view(-1)
+            )
+
+        dist = self.dqn.dist(state)
+        log_p = T.log(dist[range(self.batch_size), action])
+        elementwise_loss = -(proj_dist * log_p).sum(1)
+
+        return elementwise_loss
+
+        '''
         current_q = self.network(state).gather(1, action)
         next_q = self.target_network(next_state).max(dim=1, keepdim=True)[0].detach()
         if_done = 1 - done # sets gamma*Q to zero if step lead to termination or truncation
@@ -338,6 +381,7 @@ class DQNAgent():
         loss = F.smooth_l1_loss(current_q, target, reduction="none") # Currently on smooth_l1_loss, can change to MSE or others.
 
         return loss
+        '''
 
     def decay_epsilon(self, step, steps, linear=False):
         if linear:
