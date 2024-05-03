@@ -276,12 +276,9 @@ class DQNAgent():
         self.testing = False
          
     def action(self, state: np.ndarray):
-        '''Action choice based on epsilon-greedy policy, returns the action as a np.ndarray'''
-        if np.random.random() > self.epsilon: 
-            action = self.network(T.FloatTensor(state).to(self.device)).argmax()
-            action = action.detach().cpu().numpy() 
-        else: 
-            action = np.random.choice(self.action_space) 
+        '''Action choice based on epsilon-greedy policy, returns the action as a np.ndarray''' 
+        action = self.network(T.FloatTensor(state).to(self.device)).argmax()
+        action = action.detach().cpu().numpy() 
         
         if not self.testing:
             self.transition = [state, action]
@@ -308,9 +305,10 @@ class DQNAgent():
         loss.backward()
         nn.utils.clip_grad_norm_(self.network.parameters(), 1) # clips gradients between -1 and 1, can change
         self.optimiser.step()
+        
         priority_loss = pre_loss.detach().cpu().numpy()
         new_priorities = priority_loss + self.per_const
-        self.memory.update(batches["indices"], new_priorities)
+        self.memory.update(batches['indices'], new_priorities)
         self.network.reset()
         self.target_network.reset()
         return loss.item()
@@ -319,7 +317,7 @@ class DQNAgent():
         """loss function to simplify learn() function"""
         state = T.FloatTensor(samples["states"]).to(self.device)
         next_state = T.FloatTensor(samples["next_states"]).to(self.device)
-        action = T.LongTensor(samples["actions"].reshape(-1, 1)).to(self.device)
+        action = T.LongTensor(samples["actions"]).to(self.device)
         reward = T.FloatTensor(samples["rewards"].reshape(-1, 1)).to(self.device)
         done = T.FloatTensor(samples["dones"].reshape(-1, 1)).to(self.device)
         delta = float(self.max_return_value - self.min_return_value) / (self.atoms - 1)
@@ -342,7 +340,8 @@ class DQNAgent():
             proj_dist.view(-1).index_add_(0, (upper_bound + offset).view(-1), (next_dist * (support_indices - lower_bound.float())).view(-1))
 
         dist = self.network.distrib(state)
-        log_p = T.log(dist[range(self.batch_size), action])
+        lol = dist[range(self.batch_size), action]
+        log_p = T.log(lol)
         loss = -(proj_dist * log_p).sum(1)
 
         return loss
@@ -383,7 +382,6 @@ class DQNAgent():
                 loss = self.learn()
                 tracked_info["losses"].append(loss)
                 learn_count += 1
-                self.decay_epsilon(step, steps,linear=False)
                 tracked_info["epsilons"].append(self.epsilon)
                 self.replace_target_network(learn_count)
                 
