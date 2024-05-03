@@ -8,7 +8,9 @@ import torch.nn.functional as F     # Activation Functions
 import torch.optim as optim         # nn Optimiser
 import numpy as np                  # numpy
 from termcolor import colored       # Colored text for debugging
+import random
 import os
+from segment_tree import SumSegmentTree, MinSegmentTree
 
 from tqdm import tqdm                           # For file joining operations to handle model checkpointing
 
@@ -55,13 +57,72 @@ class ReplayMemory():
     def __len__(self):
         return self.size
 
+class PrioritisedReplay(ReplayMemory):
+    '''Prioritised Experience Replay, alpha must be positive >=0.'''
+    def __init__(self, observation_dims, memory_size, batch_size, alpha:float=0.6, beta:float=0.4):
+        super(PrioritisedReplay, self).__init__(observation_dims, memory_size, batch_size)
+        self.alpha = alpha
+        self.beta = beta
+        self.max_priority = 1.0
+        self.tree_loc = 0
+        self.tree_size = round(memory_size/2)*2 # ensures tree_size is even
+        self.min_priorities_tree = MinSegmentTree(self.tree_size)
+        self.priorities_tree = SumSegmentTree(self.tree_size)
+    
+    def store_transition(self, state, action, reward, next_state, done):
+        '''Stores a transition step in memory'''
+        super().store_transition(state, action, reward, next_state, done)
+        importance = self.max_priority ** self.alpha
+        self.priorities_tree[self.tree_loc] = importance
+        self.min_priorities_tree[self.tree_loc] = importance
+        self.tree_loc = (self.tree_loc+1) % self.max_size
+    
+    def sample(self):
+        #Get indices for batch
+        indices = []
+        total_priority = self.priorities_tree.sum()
+        segment = total_priority / self.batch_size
+        for i in range(self.batch_size):
+            a = segment*i
+            b = segment*(i + 1)
+            value = random.uniform(a, b)
+            index = self.priorities_tree.retrieve(value)
+            indices.append(index)
+        
+        #Weights
+        weights = np.array([self.get_weight(index) for index in indices])
+        return dict(states=self.state_memory[indices], 
+                    next_states=self.next_state_memory[indices],
+                    actions=self.action_memory[indices],
+                    rewards=self.reward_memory[indices],
+                    dones=self.done_memory[indices],
+                    weights=weights,
+                    indices=indices)
+        
+    def update(self, indices, priorities):
+        '''Updates the priorities of transitions[indices]'''
+        for i, priority in zip(indices, priorities):
+            self.priorities_tree[i] = priority ** self.alpha
+            self.min_priorities_tree[i] = priority ** self.alpha
+            self.max_priority = max(self.max_priority, priority)
+        
+    def get_weight(self, index):
+        '''Gets the importance sampling weight for an index in segment trees'''
+        min_priority = self.min_tree.min()/self.sum_tree.sum()
+        max_weight = (min_priority*len(self.priorities_tree))**(-self.beta)
+        priority = self.sum_tree[index]/self.sum_tree.sum()
+        weight = (priority * len(self.priorities_tree)) ** (-self.beta)
+        weight = weight / max_weight
+        return weight 
+        
+        
 class DuelingDeepQNetwork(nn.Module):
     # lr            = learning rate
     # input_dims    = input dimensions
     # fc1_dims      = fully connected layer 1 dimensions
     # fc2_dims      = fully connected layer 2 dimensions
     # n_actions     = number of actions
-    def __init__(self, lr, input_dims, nn_dims, n_actions, checkpoint_dir, name):
+    def __init__(self, input_dims, nn_dims, n_actions, checkpoint_dir, name):
         super(DuelingDeepQNetwork, self).__init__()    # Inheriting from nn.Module
 
         self.checkpoint_dir = checkpoint_dir
@@ -127,11 +188,11 @@ class DQNAgent():
         self.device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
         # Q Evaluation Network
-        self.network = DuelingDeepQNetwork(self.learning_rate, input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
+        self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
                                     n_actions=self.n_actions, name='surround_dueling_ddqn',
                                     checkpoint_dir=self.checkpoint_dir)
         
-        self.target_network = DuelingDeepQNetwork(self.learning_rate, input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
+        self.target_network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
                                     n_actions=self.n_actions, name='surround_dueling_ddqn_target',
                                     checkpoint_dir=self.checkpoint_dir)
         self.target_network.load_state_dict(self.network.state_dict())
