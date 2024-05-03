@@ -11,13 +11,13 @@ import torch
 
 env = gym.make("CartPole-v1") # "ALE/Surround-v5"  #render_mode'human' ?
 
-agent = DQNAgent(env, 0.001, 64, 0.8, 1, replace=500, max_memory_size=10000)
-total_episodes = 200 # Think we should consider changing to number of frames not episodes
+agent = DQNAgent(env, 0.0001, 64, 0.95, 1, replace=500, max_memory_size=10000)
+total_frames = int(1e4) # Think we should consider changing to number of frames not episodes
 load_checkpoint = False
 
 if load_checkpoint:
     agent.load_models()
 
-data = agent.train(total_episodes)
+data = agent.train(total_frames)
 
 grapher = Grapher(data)
