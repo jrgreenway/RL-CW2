@@ -293,7 +293,7 @@ class DQNAgent():
                 loss = self.learn()
                 tracked_info["losses"].append(loss)
                 learn_count += 1
-                self.decay_epsilon(step, int(steps*0.9),linear=False)
+                self.decay_epsilon(step, steps,linear=False)
                 tracked_info["epsilons"].append(self.epsilon)
                 self.replace_target_network(learn_count)
                 
