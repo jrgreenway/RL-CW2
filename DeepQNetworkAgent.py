@@ -103,53 +103,34 @@ class PrioritisedReplay(ReplayMemory):
         weight = weight / max_weight
         return weight 
     
-class NoisyLinear(nn.Module):
+class NoisyLayer(nn.Module):
     ''' in_features = Number of input features
         out_features= Number of output features
         sigma_init  = Initial sigma (standard deviation) parameter'''
-    def __init__(self,in_features, out_features, sigma_init=0.017):
-        super(NoisyLinear, self).__init__()
-        self.in_features = in_features
-        self.out_features = out_features
-        self.sigma_init = sigma_init
+    def __init__(self,input_features, output_features, sigma=0.017):
+        super(NoisyLayer, self).__init__()
+        self.input_features = input_features
+        self.output_features = output_features
+        self.sigma = sigma
 
-        # Make these tensors as opposed to empties?
-        self.weight_mu = nn.Parameter(T.empty(out_features, in_features)) # Mean value weight parameter
-        self.weight_sigma = nn.Parameter(T.empty(out_features, in_features)) # Standard Deviation value weight parameter
-        self.register_buffer('weight_epsilon', T.empty(out_features, in_features)) # Buffer that holds noise values added to weights during training
+        # Initialize parameters and buffers
+        self.mean_weight = nn.Parameter(T.Tensor(output_features, input_features))
+        self.std_dev_weight = nn.Parameter(T.Tensor(output_features, input_features))
+        self.register_buffer('noise_weight', T.Tensor(output_features, input_features))
 
-        self.bias_mu = nn.Parameter(T.empty(out_features)) # Mean value bias parameter
-        self.bias_sigma = nn.Parameter(T.empty(out_features)) # Standard Deviation value bias parameter
-        self.register_buffer('bias_epsilon', T.empty(out_features)) # Buffer that holds noise values added to biases during training
+        self.mean_bias = nn.Parameter(T.Tensor(output_features))
+        self.std_dev_bias = nn.Parameter(T.Tensor(output_features))
+        self.register_buffer('noise_bias', T.Tensor(output_features))
 
-        self.reset_parameters()
-        self.reset_noise()
-
-    def reset_parameters(self):
-        '''The below are just ranges that are reasonable and a value is chosen 
-        from them to initialise mu and sigma these ranges could be changed but 
-        are probably the most reasonable'''
-        mu_range = 1 / math.sqrt(self.in_features)
-        self.weight_mu.data.uniform_(-mu_range, mu_range) # Chooses with equal chance a value in the range
-        self.weight_sigma.data.fill_(self.sigma_init / math.sqrt(self.in_features))
-        self.bias_mu.data.uniform_(-mu_range, mu_range)
-        self.bias_sigma.data.fill_(self.sigma_init / math.sqrt(self.out_features))
-
-    def reset_noise(self):
-        epsilon_in = self.scale_noise(self.in_features)
-        epsilon_out = self.scale_noise(self.out_features)
-
-        self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in)) # ger gives the outer product of the epsilon out and the epsilon in
-        self.bias_epsilon.copy_(epsilon_out)
-
-    def forward(self, x: T.Tensor) -> T.Tensor:
-        '''Takes parameters and creates a noisy layer of a nueral network, replace the forward use in
-        a linear network, This is done in DuelingDeepQNetwork in self.fc1 onward'''
-        return F.linear(
-            x,
-            self.weight_mu + self.weight_sigma * self.weight_epsilon,
-            self.bias_mu + self.bias_sigma * self.bias_epsilon,
-        )
+        mu_range = 1 / math.sqrt(self.input_features)
+        self.mean_weight.data.uniform_(-mu_range, mu_range)
+        self.std_dev_weight.data.fill_(self.sigma / math.sqrt(self.input_features))
+        self.mean_bias.data.uniform_(-mu_range, mu_range)
+        self.std_dev_bias.data.fill_(self.sigma / math.sqrt(self.output_features))
+        
+        epsilon_input, epsilon_output = map(self.scale_noise, [self.input_features, self.output_features])
+        self.noise_weight.copy_(epsilon_output.ger(epsilon_input)) # ger gives the outer product of the epsilon out and the epsilon in
+        self.noise_bias.copy_(epsilon_output)
     
     def scale_noise(self, size):
         '''generates noise vectors by sampling from a factorized Gaussian distribution 
@@ -158,19 +139,37 @@ class NoisyLinear(nn.Module):
         x = T.randn(size) # Noise tensor with random values from a standard normal distribution (mean=0, standard deviation=1).
         x = x.sign().mul(x.abs().sqrt()) #The sign(-1,1 or 0) of x multiplied by the square root of the absolute value of x
         return x
+
+    def forward(self, x: T.Tensor) -> T.Tensor:
+        '''Takes parameters and creates a noisy layer of a nueral network, replace the forward use in
+        a linear network, This is done in DuelingDeepQNetwork in self.fc1 onward'''
+        return F.linear(
+            x,
+            self.mean_weight + self.std_dev_weight * self.noise_weight,
+            self.mean_bias + self.std_dev_bias * self.noise_bias,
+        )
+    
+    
         
 class DuelingDeepQNetwork(nn.Module):
-    # lr            = learning rate
-    # input_dims    = input dimensions
-    # fc1_dims      = fully connected layer 1 dimensions
-    # fc2_dims      = fully connected layer 2 dimensions
-    # n_actions     = number of actions
-    def __init__(self, input_dims, output_dims, nn_dims, n_actions, atom_size, checkpoint_dir, name):
+    def __init__(self, input_dims, output_dims, nn_dims, atom_size, checkpoint_dir, name, support):
+        """
+        Initializes the DuelingDeepQNetwork agent.
+
+        Args:
+            input_dims (int): The number of input dimensions.
+            output_dims (int): The number of output dimensions.
+            nn_dims (int): The number of dimensions for the neural network layers.
+            n_actions (int): The number of possible actions.
+            atom_size (int): The number of atoms for the value distribution.
+            checkpoint_dir (str): The directory to save checkpoints.
+            name (str): The name of the checkpoint file.
+            support (torch.Tensor): The support values for the value distribution.
+        """
         super(DuelingDeepQNetwork, self).__init__()    # Inheriting from nn.Module
 
-        #self.support = support
-        #self.out_dim = out_dim
-        #self.atom_size = atom_size
+        self.support = support
+        self.atoms = atom_size
 
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name)  # Save our checkpoint directory for later use
@@ -180,50 +179,23 @@ class DuelingDeepQNetwork(nn.Module):
             nn.ReLU(),
         )
         
-        self.V_hidden_layer = NoisyLinear(nn_dims, nn_dims)
-        self.V_layer = NoisyLinear(nn_dims, atom_size)
-        '''self.V = nn.Sequential( # Value stream: tells the agent the value of the current state
-            nn.Linear(nn_dims, nn_dims),
-            nn.ReLU(),
-            nn.Linear(nn_dims, 1),
-        )'''
+        self.V_hidden = NoisyLayer(nn_dims, nn_dims) # Value Stream
+        self.V = NoisyLayer(nn_dims, atom_size)
         
-        self.A_hidden_layer = NoisyLinear(nn_dims, nn_dims)
-        self.A_layer = NoisyLinear(nn_dims, atom_size * output_dims)
-        '''self.A = nn.Sequential( # Advantage stream: tells the agent the relative advantage of eachh action in a given state
-            nn.Linear(nn_dims, nn_dims),
-            nn.ReLU(),
-            nn.Linear(nn_dims, n_actions)
-        )'''
+        self.A_hidden = NoisyLayer(nn_dims, nn_dims) # Advantage Stream
+        self.A = NoisyLayer(nn_dims, atom_size * output_dims)
 
     def forward(self, x: T.tensor):
-        dist = self.dist(x)
-        q = T.sum(dist * self.support, dim=2)
-
-        return q
-        ''' state instead of tensor
-        x = self.feature(state)
-        V = self.V(x)
-        A = self.A(x)
-        return V + A - A.mean(dim=-1, keepdim=True)
-        '''
-    
-    def dist(self, x: T.Tensor) -> T.Tensor:
-        """Distribution"""
-        feature = self.feature_layer(x)
-        A_hid = F.relu(self.A_hidden_layer(feature))
-        V_hid = F.relu(self.V_hidden_layer(feature))
-        
-        advantage = self.A_layer(A_hid).view(
-            -1, self.output_dims, self.atom_size
-        )
-        value = self.V_layer(V_hid).view(-1, 1, self.atom_size)
-        q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
-        
+        feature = self.feature(x)
+        A = F.relu(self.A_hidden(feature))
+        V = F.relu(self.V_hidden(feature))
+        A = self.A(A).view(-1, self.output_dims, self.atoms)
+        V = self.V(V).view(-1, 1, self.atoms)
+        q_atoms = V + A - A.mean(dim=1, keepdim=True)
         dist = F.softmax(q_atoms, dim=-1)
-        dist = dist.clamp(min=1e-3)  # for avoiding nans, needed?
-        
-        return dist
+        dist = dist.clamp(min=1e-3)
+        q = T.sum(dist * self.support, dim=2)
+        return q
     
     #Save and load checkpoints
     def save_checkpoint(self):
