@@ -102,7 +102,62 @@ class PrioritisedReplay(ReplayMemory):
         weight = (priority * len(self)) ** (-beta)
         weight = weight / max_weight
         return weight 
-        
+    
+class NoisyLinear(nn.Module):
+    ''' in_features = Number of input features
+        out_features= Number of output features
+        sigma_init  = Initial sigma (standard deviation) parameter'''
+    def __init__(self,in_features, out_features, sigma_init=0.017):
+        super(NoisyLinear, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.sigma_init = sigma_init
+
+        # Make these tensors as opposed to empties?
+        self.weight_mu = nn.Parameter(T.empty(out_features, in_features)) # Mean value weight parameter
+        self.weight_sigma = nn.Parameter(T.empty(out_features, in_features)) # Standard Deviation value weight parameter
+        self.register_buffer('weight_epsilon', T.empty(out_features, in_features)) # Buffer that holds noise values added to weights during training
+
+        self.bias_mu = nn.Parameter(T.empty(out_features)) # Mean value bias parameter
+        self.bias_sigma = nn.Parameter(T.empty(out_features)) # Standard Deviation value bias parameter
+        self.register_buffer('bias_epsilon', T.empty(out_features)) # Buffer that holds noise values added to biases during training
+
+        self.reset_parameters()
+        self.reset_noise()
+
+    def reset_parameters(self):
+        '''The below are just ranges that are reasonable and a value is chosen 
+        from them to initialise mu and sigma these ranges could be changed but 
+        are probably the most reasonable'''
+        mu_range = 1 / math.sqrt(self.in_features)
+        self.weight_mu.data.uniform_(-mu_range, mu_range) # Chooses with equal chance a value in the range
+        self.weight_sigma.data.fill_(self.sigma_init / math.sqrt(self.in_features))
+        self.bias_mu.data.uniform_(-mu_range, mu_range)
+        self.bias_sigma.data.fill_(self.sigma_init / math.sqrt(self.out_features))
+
+    def reset_noise(self):
+        epsilon_in = self.scale_noise(self.in_features)
+        epsilon_out = self.scale_noise(self.out_features)
+
+        self.weight_epsilon.copy_(epsilon_out.ger(epsilon_in)) # ger gives the outer product of the epsilon out and the epsilon in
+        self.bias_epsilon.copy_(epsilon_out)
+
+    def forward(self, x: T.Tensor) -> T.Tensor:
+        '''Takes parameters and creates a noisy layer of a nueral network, replace the forward use in
+        a linear network, This is done in DuelingDeepQNetwork in self.fc1 onward'''
+        return F.linear(
+            x,
+            self.weight_mu + self.weight_sigma * self.weight_epsilon,
+            self.bias_mu + self.bias_sigma * self.bias_epsilon,
+        )
+    
+    def scale_noise(self, size):
+        '''generates noise vectors by sampling from a factorized Gaussian distribution 
+        with mean 0 and standard deviation 1, and then scales the noise vectors 
+        according to the size of the input or output features.'''
+        x = T.randn(size) # Noise tensor with random values from a standard normal distribution (mean=0, standard deviation=1).
+        x = x.sign().mul(x.abs().sqrt()) #The sign(-1,1 or 0) of x multiplied by the square root of the absolute value of x
+        return x
         
 class DuelingDeepQNetwork(nn.Module):
     # lr            = learning rate
@@ -151,7 +206,7 @@ class DuelingDeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, eps_min=0.1, replace=1000, checkpoint_dir='tmp/'): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, eps_min=0.1, replace=1000, checkpoint_dir='tmp/', v_min = 0.0, v_max = 200.0, atom_size = 51,): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -176,6 +231,14 @@ class DQNAgent():
         self.checkpoint_dir = checkpoint_dir
 
         self.device = T.device("cuda" if T.cuda.is_available() else "cpu")
+
+        # Categorical DQN params
+        self.v_min = v_min
+        self.v_max = v_max
+        self.atom_size = atom_size
+        self.support = T.linspace(
+            self.v_min, self.v_max, self.atom_size
+        ).to(self.device)
 
         # Q Evaluation Network
         self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
