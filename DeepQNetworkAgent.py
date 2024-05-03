@@ -217,8 +217,8 @@ class DQNAgent():
                 next_state, reward, terminated, truncated, _ = self.env.step(action)
                 state = next_state
                 done = terminated or truncated
-                if not done:
-                    reward += 0.01
+                # if not done:
+                #     reward += 0.01
                 score += reward
                 
                 if not self.testing:
