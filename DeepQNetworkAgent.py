@@ -8,7 +8,10 @@ import torch.nn.functional as F     # Activation Functions
 import torch.optim as optim         # nn Optimiser
 import numpy as np                  # numpy
 from termcolor import colored       # Colored text for debugging
+import random
 import os
+import math
+from segment_tree import SumSegmentTree, MinSegmentTree
 
 from tqdm import tqdm                           # For file joining operations to handle model checkpointing
 
@@ -29,9 +32,6 @@ class ReplayMemory():
         self.action_memory = np.zeros((memory_size), dtype=np.int32)
         self.reward_memory = np.zeros((memory_size), dtype=np.float32)
         self.done_memory = np.zeros(memory_size, dtype=bool)
-        
-
-
     
     def store_transition(self, state, action, reward, next_state, done):
         #Store transitions in memory so that we can use them for experience replay   
@@ -42,26 +42,75 @@ class ReplayMemory():
         self.done_memory[self.memory_index] = done
         self.memory_index = (self.memory_index + 1) % self.memory_size
         self.size = min(self.size + 1, self.memory_size)
-    
-    def sample(self):
-        #Returns a batch of random experiences of size batch_size
-        batch_indexes = np.random.choice(self.size, size=self.batch_size, replace=False)
-        return dict(states=self.state_memory[batch_indexes], 
-                    next_states=self.next_state_memory[batch_indexes],
-                    actions=self.action_memory[batch_indexes],
-                    rewards=self.reward_memory[batch_indexes],
-                    dones=self.done_memory[batch_indexes])
 
     def __len__(self):
         return self.size
 
+class PrioritisedReplay(ReplayMemory):
+    '''Prioritised Experience Replay, alpha must be positive >=0.'''
+    def __init__(self, observation_dims, memory_size, batch_size, alpha:float=0.6):
+        super(PrioritisedReplay, self).__init__(observation_dims, memory_size, batch_size)
+        self.alpha = alpha
+        self.max_priority = 1.0
+        self.tree_loc = 0
+        self.tree_size = 2**math.ceil(math.log2(memory_size)) #ensures tree_size is a power of 2
+        self.min_priorities_tree = MinSegmentTree(self.tree_size)
+        self.priorities_tree = SumSegmentTree(self.tree_size)
+    
+    def store_transition(self, state, action, reward, next_state, done):
+        '''Stores a transition step in memory'''
+        super().store_transition(state, action, reward, next_state, done)
+        importance = self.max_priority ** self.alpha
+        self.priorities_tree[self.tree_loc] = importance
+        self.min_priorities_tree[self.tree_loc] = importance
+        self.tree_loc = (self.tree_loc+1) % self.memory_size
+    
+    def sample(self, beta=0.4):
+        #Get indices for batch
+        indices = []
+        total_priority = self.priorities_tree.sum(0, len(self) - 1)
+        segment = total_priority / self.batch_size
+        for i in range(self.batch_size):
+            a = segment*i
+            b = segment*(i + 1)
+            value = random.uniform(a, b)
+            index = self.priorities_tree.find_prefixsum_idx(value)
+            indices.append(index)
+        
+        #Weights
+        weights = np.array([self.get_weight(index, beta) for index in indices])
+        return dict(states=self.state_memory[indices], 
+                    next_states=self.next_state_memory[indices],
+                    actions=self.action_memory[indices],
+                    rewards=self.reward_memory[indices],
+                    dones=self.done_memory[indices],
+                    weights=weights,
+                    indices=indices)
+        
+    def update(self, indices, priorities):
+        '''Updates the priorities of transitions[indices]'''
+        for i, priority in zip(indices, priorities):
+            self.priorities_tree[i] = priority ** self.alpha
+            self.min_priorities_tree[i] = priority ** self.alpha
+            self.max_priority = max(self.max_priority, priority)
+        
+    def get_weight(self, index, beta):
+        '''Gets the importance sampling weight for an index in segment trees'''
+        min_priority = self.min_priorities_tree.min()/self.priorities_tree.sum()
+        max_weight = (min_priority*len(self))**(-beta)
+        priority = self.priorities_tree[index]/self.priorities_tree.sum()
+        weight = (priority * len(self)) ** (-beta)
+        weight = weight / max_weight
+        return weight 
+        
+        
 class DuelingDeepQNetwork(nn.Module):
     # lr            = learning rate
     # input_dims    = input dimensions
     # fc1_dims      = fully connected layer 1 dimensions
     # fc2_dims      = fully connected layer 2 dimensions
     # n_actions     = number of actions
-    def __init__(self, lr, input_dims, nn_dims, n_actions, checkpoint_dir, name):
+    def __init__(self, input_dims, nn_dims, n_actions, checkpoint_dir, name):
         super(DuelingDeepQNetwork, self).__init__()    # Inheriting from nn.Module
 
         self.checkpoint_dir = checkpoint_dir
@@ -102,7 +151,7 @@ class DuelingDeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, max_memory_size=100000, hidden_neurons=64, eps_decay=0.995, eps_min=0.1, replace=1000, checkpoint_dir='tmp/'): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, eps_min=0.1, replace=1000, checkpoint_dir='tmp/'): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -114,10 +163,12 @@ class DQNAgent():
         self.action_space = [i for i in range(self.n_actions)]
         self.memory_size = max_memory_size
         
-        self.memory = ReplayMemory(self.observation_shape[0], max_memory_size, batch_size)
+        self.per_const = per_const
+        self.beta = beta
+        self.memory = PrioritisedReplay(self.observation_shape[0], max_memory_size, batch_size, alpha)
         
         self.epsilon = epsilon
-        self.eps_decay = eps_decay
+        self.eps_max = epsilon
         self.eps_min = eps_min
         self.gamma = gamma
 
@@ -127,11 +178,11 @@ class DQNAgent():
         self.device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
         # Q Evaluation Network
-        self.network = DuelingDeepQNetwork(self.learning_rate, input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
+        self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
                                     n_actions=self.n_actions, name='surround_dueling_ddqn',
                                     checkpoint_dir=self.checkpoint_dir)
         
-        self.target_network = DuelingDeepQNetwork(self.learning_rate, input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
+        self.target_network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
                                     n_actions=self.n_actions, name='surround_dueling_ddqn_target',
                                     checkpoint_dir=self.checkpoint_dir)
         self.target_network.load_state_dict(self.network.state_dict())
@@ -170,15 +221,19 @@ class DQNAgent():
 
     def learn(self):
         batches = self.memory.sample()
-        loss = self.calculate_loss(batches) # make helper function
+        pre_loss = self.calculate_loss(batches)
+        loss = T.mean(pre_loss*T.FloatTensor(batches["weights"].reshape(-1, 1)).to(self.device))
         self.optimiser.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(self.network.parameters(), 1) # clips gradients between -1 and 1, can change
         self.optimiser.step()
+        priority_loss = pre_loss.detach().cpu().numpy()
+        new_priorities = priority_loss + self.per_const
+        self.memory.update(batches["indices"], new_priorities)
         return loss.item()
 
     def calculate_loss(self, samples):
-        """Helper function to simplify learn() function, returns the loss"""
+        """loss function to simplify learn() function"""
         state = T.FloatTensor(samples["states"]).to(self.device)
         next_state = T.FloatTensor(samples["next_states"]).to(self.device)
         action = T.LongTensor(samples["actions"].reshape(-1, 1)).to(self.device)
@@ -190,17 +245,18 @@ class DQNAgent():
         if_done = 1 - done # sets gamma*Q to zero if step lead to termination or truncation
         target = (reward + self.gamma * next_q * if_done).to(self.device)
 
-        loss = F.smooth_l1_loss(current_q, target) # Currently on smooth_l1_loss, can change to MSE or others.
+        loss = F.smooth_l1_loss(current_q, target, reduction="none") # Currently on smooth_l1_loss, can change to MSE or others.
 
         return loss
 
-    def decay_epsilon(self, linear=False):
+    def decay_epsilon(self, step, steps, linear=False):
         if linear:
-            self.epsilon = max(self.eps_min, self.epsilon - self.eps_decay)
+            dec = (self.eps_max - self.eps_min) / steps
+            self.epsilon = max(self.eps_min, self.eps_max - dec * step)
         else:
-            self.epsilon = max(self.eps_min, self.epsilon * self.eps_decay)
+            self.epsilon = self.eps_min + (self.eps_max - self.eps_min) * math.exp(-1. * step * math.log((self.eps_max / self.eps_min), math.e) / steps)
         
-    def train(self, episodes):
+    def train(self, steps):
         self.testing = False
         tracked_info = {
             "scores":[],
@@ -208,35 +264,38 @@ class DQNAgent():
             "epsilons":[]
         }
         learn_count = 0
-        
+        episodes = 0
+        score = 0
         state, _ = self.env.reset()
-        for episode in tqdm(range(1,episodes+1)):
-            score = 0
-            while True:
-                action = self.action(state)
-                next_state, reward, terminated, truncated, _ = self.env.step(action)
-                state = next_state
-                score += reward
-                done = terminated or truncated
-                if not self.testing:
-                    self.transition += [reward, next_state, done]
-                    self.memory.store_transition(*self.transition)
-                
-                if done:
-                    state, _ = self.env.reset()
-                    tracked_info["scores"].append(score)
-                    score = 0
-                    if episode > 10 and episode % 10 == 0:
-                        self.save_models()
-                    break
-                
-                if len(self.memory) >= self.batch_size:
-                    loss = self.learn()
-                    tracked_info["losses"].append(loss)
-                    learn_count += 1
-                    self.decay_epsilon(linear=False)
-                    tracked_info["epsilons"].append(self.epsilon)
-                    self.replace_target_network(learn_count)
+        for step in tqdm(range(1,steps+1)):
+            action = self.action(state)
+            next_state, reward, terminated, truncated, _ = self.env.step(action)
+            state = next_state
+            done = terminated or truncated
+            # if not done:
+            #     reward += 0.01
+            score += reward
+            self.beta = self.beta + min(step/steps,1)*(1-self.beta)
+            
+            if not self.testing:
+                self.transition += [reward, next_state, done]
+                self.memory.store_transition(*self.transition)
+            
+            if done:
+                state, _ = self.env.reset()
+                tracked_info["scores"].append(score)
+                score = 0
+                episodes+=1
+                if episodes > 10 and episodes % 10 == 0:
+                    self.save_models()
+            
+            if len(self.memory) >= self.batch_size:
+                loss = self.learn()
+                tracked_info["losses"].append(loss)
+                learn_count += 1
+                self.decay_epsilon(step, steps,linear=False)
+                tracked_info["epsilons"].append(self.epsilon)
+                self.replace_target_network(learn_count)
                 
         self.env.close()
         return tracked_info
