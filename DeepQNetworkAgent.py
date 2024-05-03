@@ -12,16 +12,13 @@ import random
 import os
 import math
 from segment_tree import SumSegmentTree, MinSegmentTree
+from nStep import nStep
 
 from tqdm import tqdm                           # For file joining operations to handle model checkpointing
 
-# This inmplementation has no target network or convulutional layers
-# Convulutional layers are used to process the image and extract features from it
-# Target network is basically a copy of the main network that is updated every few steps
-
 
 class ReplayMemory():
-    def __init__(self, observation_dims, memory_size, batch_size):
+    def __init__(self, observation_dims, memory_size, batch_size, n_step: int = 3):
         # Experience memory
         self.batch_size = batch_size
         self.memory_size = memory_size
@@ -32,6 +29,7 @@ class ReplayMemory():
         self.action_memory = np.zeros((memory_size), dtype=np.int32)
         self.reward_memory = np.zeros((memory_size), dtype=np.float32)
         self.done_memory = np.zeros(memory_size, dtype=bool)
+        
     
     def store_transition(self, state, action, reward, next_state, done):
         #Store transitions in memory so that we can use them for experience replay   
@@ -46,6 +44,7 @@ class ReplayMemory():
     def __len__(self):
         return self.size
 
+# THIS CHANGES WITH N STEP
 class PrioritisedReplay(ReplayMemory):
     '''Prioritised Experience Replay, alpha must be positive >=0.'''
     def __init__(self, observation_dims, memory_size, batch_size, alpha:float=0.6):
@@ -102,8 +101,7 @@ class PrioritisedReplay(ReplayMemory):
         weight = (priority * len(self)) ** (-beta)
         weight = weight / max_weight
         return weight 
-        
-        
+              
 class DuelingDeepQNetwork(nn.Module):
     # lr            = learning rate
     # input_dims    = input dimensions
