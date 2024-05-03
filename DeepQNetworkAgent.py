@@ -265,9 +265,9 @@ class DQNAgent():
         }
         learn_count = 0
         episodes = 0
+        score = 0
         state, _ = self.env.reset()
         for step in tqdm(range(1,steps+1)):
-            score = 0
             action = self.action(state)
             next_state, reward, terminated, truncated, _ = self.env.step(action)
             state = next_state
