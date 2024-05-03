@@ -12,7 +12,7 @@ env = gym.make("CartPole-v1") # "ALE/Surround-v5"  #render_mode'human' ?
 agent = DQNAgent(learning_rate=5e-4, batch_size=64, observation_space=env.observation_space.shape, \
                   n_actions=env.action_space.n, epsilon=1.0, eps_decay=1e-3, eps_min=0.01, gamma=0.95, replace = 50)
 scores, eps_history = [], []
-total_episodes = 250
+total_episodes = 100
 load_checkpoint = False
 data_store = Grapher()
 
