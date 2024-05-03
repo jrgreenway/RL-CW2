@@ -227,8 +227,8 @@ class DQNAgent():
         loss.backward()
         nn.utils.clip_grad_norm_(self.network.parameters(), 1) # clips gradients between -1 and 1, can change
         self.optimiser.step()
-        prior_loss = pre_loss.detach().cpu().numpy()
-        new_priorities = prior_loss + self.per_const
+        priority_loss = pre_loss.detach().cpu().numpy()
+        new_priorities = priority_loss + self.per_const
         self.memory.update(batches["indices"], new_priorities)
         return loss.item()
 
@@ -254,7 +254,7 @@ class DQNAgent():
             dec = (self.eps_max - self.eps_min) / steps
             self.epsilon = max(self.eps_min, self.eps_max - dec * step)
         else:
-            self.epsilon = self.eps_max + (self.eps_max - self.eps_min) * math.exp(-1. * step / steps)
+            self.epsilon = self.eps_min + (self.eps_max - self.eps_min) * math.exp(-1. * step * math.log((self.eps_max / self.eps_min), math.e) / steps)
         
     def train(self, steps):
         self.testing = False
@@ -293,7 +293,7 @@ class DQNAgent():
                 loss = self.learn()
                 tracked_info["losses"].append(loss)
                 learn_count += 1
-                self.decay_epsilon(step, steps,linear=False)
+                self.decay_epsilon(step, int(steps*0.9),linear=False)
                 tracked_info["epsilons"].append(self.epsilon)
                 self.replace_target_network(learn_count)
                 
