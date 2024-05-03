@@ -165,8 +165,12 @@ class DuelingDeepQNetwork(nn.Module):
     # fc1_dims      = fully connected layer 1 dimensions
     # fc2_dims      = fully connected layer 2 dimensions
     # n_actions     = number of actions
-    def __init__(self, input_dims, nn_dims, n_actions, checkpoint_dir, name):
+    def __init__(self, input_dims, output_dims, nn_dims, n_actions, atom_size, checkpoint_dir, name):
         super(DuelingDeepQNetwork, self).__init__()    # Inheriting from nn.Module
+
+        #self.support = support
+        #self.out_dim = out_dim
+        #self.atom_size = atom_size
 
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name)  # Save our checkpoint directory for later use
@@ -176,23 +180,44 @@ class DuelingDeepQNetwork(nn.Module):
             nn.ReLU(),
         )
         
-        self.V = nn.Sequential( # Value stream: tells the agent the value of the current state
+        self.V_hidden_layer = NoisyLinear(nn_dims, nn_dims)
+        self.V_layer = NoisyLinear(nn_dims, atom_size)
+        '''self.V = nn.Sequential( # Value stream: tells the agent the value of the current state
             nn.Linear(nn_dims, nn_dims),
             nn.ReLU(),
             nn.Linear(nn_dims, 1),
-        )
+        )'''
         
-        self.A = nn.Sequential( # Advantage stream: tells the agent the relative advantage of eachh action in a given state
+        self.A_hidden_layer = NoisyLinear(nn_dims, nn_dims)
+        self.A_layer = NoisyLinear(nn_dims, atom_size * output_dims)
+        '''self.A = nn.Sequential( # Advantage stream: tells the agent the relative advantage of eachh action in a given state
             nn.Linear(nn_dims, nn_dims),
             nn.ReLU(),
             nn.Linear(nn_dims, n_actions)
-        )     
+        )'''
 
     def forward(self, state):
         x = self.feature(state)
         V = self.V(x)
         A = self.A(x)
         return V + A - A.mean(dim=-1, keepdim=True)
+    
+    def dist(self, x: T.Tensor) -> T.Tensor:
+        """Get distribution for atoms."""
+        feature = self.feature_layer(x)
+        adv_hid = F.relu(self.A_hidden_layer(feature))
+        val_hid = F.relu(self.V_hidden_layer(feature))
+        
+        advantage = self.A_layer(adv_hid).view(
+            -1, self.output_dims, self.atom_size
+        )
+        value = self.V_layer(val_hid).view(-1, 1, self.atom_size)
+        q_atoms = value + advantage - advantage.mean(dim=1, keepdim=True)
+        
+        dist = F.softmax(q_atoms, dim=-1)
+        dist = dist.clamp(min=1e-3)  # for avoiding nans
+        
+        return dist
     
     #Save and load checkpoints
     def save_checkpoint(self):
@@ -242,11 +267,11 @@ class DQNAgent():
 
         # Q Evaluation Network
         self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
-                                    n_actions=self.n_actions, name='surround_dueling_ddqn',
+                                    n_actions=self.n_actions, atom_size=self.atom_size, name='surround_dueling_ddqn',
                                     checkpoint_dir=self.checkpoint_dir)
         
         self.target_network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
-                                    n_actions=self.n_actions, name='surround_dueling_ddqn_target',
+                                    n_actions=self.n_actions, atom_size=self.atom_size, name='surround_dueling_ddqn_target',
                                     checkpoint_dir=self.checkpoint_dir)
         self.target_network.load_state_dict(self.network.state_dict())
         self.target_network.eval()
@@ -302,6 +327,8 @@ class DQNAgent():
         action = T.LongTensor(samples["actions"].reshape(-1, 1)).to(self.device)
         reward = T.FloatTensor(samples["rewards"].reshape(-1, 1)).to(self.device)
         done = T.FloatTensor(samples["dones"].reshape(-1, 1)).to(self.device)
+
+        '''Categorical DQN changes'''
 
         current_q = self.network(state).gather(1, action)
         next_q = self.target_network(next_state).max(dim=1, keepdim=True)[0].detach()
