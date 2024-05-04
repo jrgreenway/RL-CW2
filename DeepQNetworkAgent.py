@@ -12,40 +12,112 @@ import random
 import os
 import math
 from segment_tree import SumSegmentTree, MinSegmentTree
-from nStep import nStep
+from collections import deque
+from typing import Deque, Dict, List, Tuple
 
 from tqdm import tqdm                           # For file joining operations to handle model checkpointing
 
 
-class ReplayMemory():
-    def __init__(self, observation_dims, memory_size, batch_size, n_step: int = 3):
-        # Experience memory
-        self.batch_size = batch_size
-        self.memory_size = memory_size
-        self.memory_index = 0
-        self.size = 0
-        self.state_memory = np.zeros((memory_size, observation_dims), dtype=np.float32)
-        self.next_state_memory = np.zeros((memory_size, observation_dims), dtype=np.float32)
-        self.action_memory = np.zeros((memory_size), dtype=np.int32)
-        self.reward_memory = np.zeros((memory_size), dtype=np.float32)
+class nStepReplayMemory:
+    """Converts to n-step transitions and stores them in a cyclic buffer."""
+
+    #
+    def __init__(self, observation_dimensions: int, memory_size: int, batch_size: int = 32, n_step: int = 3, gamma: float = 0.99):
+
+        self.state_memory = np.zeros([memory_size, observation_dimensions], dtype=np.float32)
+        self.next_state_memory = np.zeros([memory_size, observation_dimensions], dtype=np.float32)
+        self.action_memory = np.zeros([memory_size], dtype=np.int32)
+        self.reward_memory = np.zeros([memory_size], dtype=np.float32)
         self.done_memory = np.zeros(memory_size, dtype=bool)
+        self.max_memory_size = memory_size    # max capacity of the buffer
+        self.batch_size = batch_size
+        self.memory_index = 0    # pointer to the current location in the buffer
+        self.size = 0   # current size of the buffer
         
-    
-    def store_transition(self, state, action, reward, next_state, done):
-        #Store transitions in memory so that we can use them for experience replay   
+        # for N-step Learning
+        self.n_step_buffer = deque(maxlen=n_step)   
+        self.n_step = n_step
+        self.gamma = gamma
+
+    # STORE WITHOUT END STEP (FOR TESTING)
+    def OLDReplyMemoryStoreTransition(self, state, action, reward, next_state, done):
+        #This is how the old ReplayMemory class stored transitions
         self.state_memory[self.memory_index] = state
         self.action_memory[self.memory_index] = action
         self.reward_memory[self.memory_index] = reward
         self.next_state_memory[self.memory_index] = next_state
         self.done_memory[self.memory_index] = done
-        self.memory_index = (self.memory_index + 1) % self.memory_size
-        self.size = min(self.size + 1, self.memory_size)
+        self.memory_index = (self.memory_index + 1) % self.max_memory_size
+        self.size = min(self.size + 1, self.max_memory_size)
 
-    def __len__(self):
+
+    # store the transition in the buffer and return the n-step transition if ready
+    # input experience - output n-step transition
+    # state: np.ndarray, action: np.ndarray, reward: float, next_state: np.ndarray, done: bool) -> Tuple[np.ndarray, np.ndarray, float, np.ndarray, bool]:
+    def nStep_store(self, state, action, reward, next_state, done):
+        
+        experience = (state, action, reward, next_state, done)  # single step transition
+        self.n_step_buffer.append(experience)
+
+        # single step transition is not ready
+        if len(self.n_step_buffer) < self.n_step:   # if n_step_buffer is not full do not return anything
+            return ()
+        
+        # make a n-step transition.     Look into the future
+        reward, next_state, done = self._get_n_step_info(self.n_step_buffer, self.gamma) # Look into the future, sets n-step values
+        state, action = self.n_step_buffer[0][:2]  # state and action become the first state and action in the n-step buffer
+        
+        self.state_memory[self.memory_index] = state
+        self.next_state_memory[self.memory_index] = next_state
+        self.action_memory[self.memory_index] = action
+        self.reward_memory[self.memory_index] = reward
+        self.done_memory[self.memory_index] = done
+        self.memory_index = (self.memory_index + 1) % self.max_memory_size
+        self.size = min(self.size + 1, self.max_memory_size)
+        
+        return self.n_step_buffer[0] # return the single step transition
+
+    def sample_batch(self) -> Dict[str, np.ndarray]:
+        indices = np.random.choice(self.size, size=self.batch_size, replace=False)
+
+        return dict(
+            obs=self.state_memory[indices],
+            next_state=self.next_state_memory[indices],
+            acts=self.action_memory[indices],
+            rews=self.reward_memory[indices],
+            done=self.done_memory[indices],
+            # for N-step Learning
+            indices=indices,
+        )
+    
+    def sample_batch_from_idxs(self, indices: np.ndarray) -> Dict[str, np.ndarray]:
+        # for N-step Learning
+        return dict(
+            obs=self.state_memory[indices],
+            next_state=self.next_state_memory[indices],
+            acts=self.action_memory[indices],
+            rews=self.reward_memory[indices],
+            done=self.done_memory[indices],
+        )
+    
+    def _get_n_step_info(self, n_step_buffer: Deque, gamma: float) -> Tuple[np.int64, np.ndarray, bool]:
+        """Return n step reward, next_state, and done."""
+        # info of the last transition
+        r, next_state, done = n_step_buffer[-1][-3:]  # n_step_buffer[-1][-3:] means 
+
+        for transition in reversed(list(n_step_buffer)[:-1]):
+            r, n_s, d = transition[-3:]
+
+            r = r + gamma * r * (1 - d)
+            next_state, done = (n_s, d) if d else (next_state, done)
+
+        return r, next_state, done
+
+    def __len__(self) -> int:
         return self.size
 
 # THIS CHANGES WITH N STEP
-class PrioritisedReplay(ReplayMemory):
+class PrioritisedReplay(nStepReplayMemory):
     '''Prioritised Experience Replay, alpha must be positive >=0.'''
     def __init__(self, observation_dims, memory_size, batch_size, alpha:float=0.6):
         super(PrioritisedReplay, self).__init__(observation_dims, memory_size, batch_size)
@@ -58,11 +130,12 @@ class PrioritisedReplay(ReplayMemory):
     
     def store_transition(self, state, action, reward, next_state, done):
         '''Stores a transition step in memory'''
-        super().store_transition(state, action, reward, next_state, done)
+        # STORE nSTEP EXPERIENCES INSTEAD
+        super().nStep_store(state, action, reward, next_state, done)
         importance = self.max_priority ** self.alpha
         self.priorities_tree[self.tree_loc] = importance
         self.min_priorities_tree[self.tree_loc] = importance
-        self.tree_loc = (self.tree_loc+1) % self.memory_size
+        self.tree_loc = (self.tree_loc+1) % self.max_memory_size
     
     def sample(self, beta=0.4):
         #Get indices for batch
@@ -147,9 +220,24 @@ class DuelingDeepQNetwork(nn.Module):
         self.load_state_dict(T.load(self.checkpoint_file))
     
 
-
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, eps_min=0.1, replace=1000, checkpoint_dir='tmp/'): 
+    def __init__(
+            self,
+            env: gymnasium.Env,
+            learning_rate,
+            batch_size,
+            gamma,
+            epsilon,
+            alpha=0.6,
+            beta=0.4,
+            per_const=1e-6,
+            max_memory_size=100000,
+            hidden_neurons=128,
+            eps_min=0.001,
+            replace_target_nn=1000,
+            checkpoint_dir='tmp/',
+            n_step = 3 # n-step learning
+            ): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -160,6 +248,7 @@ class DQNAgent():
         self.n_actions = env.action_space.n
         self.action_space = [i for i in range(self.n_actions)]
         self.memory_size = max_memory_size
+        self.n_step = n_step
         
         self.per_const = per_const
         self.beta = beta
@@ -170,10 +259,24 @@ class DQNAgent():
         self.eps_min = eps_min
         self.gamma = gamma
 
-        self.replace_target_count = replace
+        self.replace_target_count = replace_target_nn
         self.checkpoint_dir = checkpoint_dir
 
+        # 1 step and n step learning
+
+        # memory for 1-step Learning
+        #self.memory = nStepReplayBuffer(self.observation_shape[0], max_memory_size, batch_size, n_step=1, gamma=gamma)
+        
+        # memory for N-step Learning
+        """
+        self.use_n_step = True if n_step > 1 else False
+        if self.use_n_step:
+            self.n_step = n_step
+            self.memory_n = nStepReplayBuffer(self.observation_shape[0], max_memory_size, batch_size, n_step=n_step, gamma=gamma)
+        """
+
         self.device = T.device("cuda" if T.cuda.is_available() else "cpu")
+        print(colored(f"Using {self.device}", "green"))
 
         # Q Evaluation Network
         self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
@@ -186,6 +289,7 @@ class DQNAgent():
         self.target_network.load_state_dict(self.network.state_dict())
         self.target_network.eval()
         
+        # Optimser
         self.optimiser = optim.Adam(self.network.parameters())
         
         self.transition = []
@@ -218,7 +322,7 @@ class DQNAgent():
         self.Q_next.load_checkpoint()
 
     def learn(self):
-        batches = self.memory.sample()
+        batches = self.memory.sample()  ## Prioritised replay
         pre_loss = self.calculate_loss(batches)
         loss = T.mean(pre_loss*T.FloatTensor(batches["weights"].reshape(-1, 1)).to(self.device))
         self.optimiser.zero_grad()
@@ -227,7 +331,7 @@ class DQNAgent():
         self.optimiser.step()
         priority_loss = pre_loss.detach().cpu().numpy()
         new_priorities = priority_loss + self.per_const
-        self.memory.update(batches["indices"], new_priorities)
+        self.memory.update(batches["indices"], new_priorities)   ## Prioritised replay
         return loss.item()
 
     def calculate_loss(self, samples):
@@ -277,7 +381,7 @@ class DQNAgent():
             
             if not self.testing:
                 self.transition += [reward, next_state, done]
-                self.memory.store_transition(*self.transition)
+                self.memory.store_transition(*self.transition)    ## Prioritised replay
             
             if done:
                 state, _ = self.env.reset()
