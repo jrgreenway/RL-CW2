@@ -1,20 +1,23 @@
 import matplotlib.pyplot as plt
 from datetime import datetime
 import os
+import json
 
 class Grapher():
-    def __init__(self, data:dict):
+    def __init__(self, data:dict, args:dict):
+        nowtimestamp = datetime.now()
+        self.timestamp = nowtimestamp.strftime("%m_%d,%H_%M_%S")
         self.data = data
+        self.args = args
         os.makedirs('graphs', exist_ok=True)
         self.plot_data()
+        self.save_args()
+
+    def save_args(self):
+        with open(f'graphs/{self.timestamp}_parameters.json', 'w') as f:
+            json.dump(self.args, f)
 
     def plot_data(self):
-
-        #timestamp for graphs
-        nowtimestamp = datetime.now()
-        timestamp = nowtimestamp.strftime("%m_%d,%H_%M_%S")
-
-        # Plot each column against the index and save the graph
         for key in self.data.keys():
             plt.figure(figsize=(10, 6))
             plt.plot(self.data[key])
@@ -22,6 +25,6 @@ class Grapher():
             plt.xlabel('Episode')
             plt.ylabel(key.capitalize())
             plt.grid(True)
-            plt.savefig(f'graphs/{timestamp}{key}.png')
+            plt.savefig(f'graphs/{self.timestamp}{key}.png')
             plt.close()
 
