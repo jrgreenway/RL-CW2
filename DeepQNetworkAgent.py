@@ -1,5 +1,5 @@
 #Imports
-#from DQN import DQN #Change According to NN naming
+from collections import deque
 import gymnasium
 import torch as T
 import torch.nn as nn               # Neural Network (nn)
@@ -89,7 +89,10 @@ class PrioritisedReplay(ReplayMemory):
         
     def update(self, indices, priorities):
         '''Updates the priorities of transitions[indices]'''
+        assert len(indices) == len(priorities)
         for i, priority in zip(indices, priorities):
+            assert priority > 0
+            assert 0 <= i < len(self)
             self.priorities_tree[i] = priority ** self.alpha
             self.min_priorities_tree[i] = priority ** self.alpha
             self.max_priority = max(self.max_priority, priority)
@@ -102,16 +105,78 @@ class PrioritisedReplay(ReplayMemory):
         weight = (priority * len(self)) ** (-beta)
         weight = weight / max_weight
         return weight 
+    
+class NoisyLayer(nn.Module):
+    ''' in_features = Number of input features
+        out_features= Number of output features
+        sigma_init  = Initial sigma (standard deviation) parameter'''
+    def __init__(self,input_features, output_features, sigma=0.017):
+        super(NoisyLayer, self).__init__()
+        self.input_features = input_features
+        self.output_features = output_features
+        self.sigma = sigma
+
+        # Initialize parameters and buffers
+        self.mean_weight = nn.Parameter(T.Tensor(output_features, input_features))
+        self.std_dev_weight = nn.Parameter(T.Tensor(output_features, input_features))
+        self.register_buffer('noise_weight', T.Tensor(output_features, input_features))
+
+        self.mean_bias = nn.Parameter(T.Tensor(output_features))
+        self.std_dev_bias = nn.Parameter(T.Tensor(output_features))
+        self.register_buffer('noise_bias', T.Tensor(output_features))
+
+        mu_range = 1 / math.sqrt(self.input_features)
+        self.mean_weight.data.uniform_(-mu_range, mu_range)
+        self.std_dev_weight.data.fill_(self.sigma / math.sqrt(self.input_features))
+        self.mean_bias.data.uniform_(-mu_range, mu_range)
+        self.std_dev_bias.data.fill_(self.sigma / math.sqrt(self.output_features))
         
+        self.reset()
+    
+    def scale_noise(self, size):
+        '''generates noise vectors by sampling from a factorized Gaussian distribution 
+        with mean 0 and standard deviation 1, and then scales the noise vectors 
+        according to the size of the input or output features.'''
+        x = T.randn(size) # Noise tensor with random values from a standard normal distribution (mean=0, standard deviation=1).
+        x = x.sign().mul(x.abs().sqrt()) #The sign(-1,1 or 0) of x multiplied by the square root of the absolute value of x
+        return x
+    
+    def reset(self):
+        epsilon_input, epsilon_output = map(self.scale_noise, [self.input_features, self.output_features])
+        self.noise_weight.copy_(epsilon_output.ger(epsilon_input)) # ger gives the outer product of the epsilon out and the epsilon in
+        self.noise_bias.copy_(epsilon_output)
+
+    def forward(self, x: T.Tensor) -> T.Tensor:
+        '''Takes parameters and creates a noisy layer of a nueral network, replace the forward use in
+        a linear network, This is done in DuelingDeepQNetwork in self.fc1 onward'''
+        return F.linear(
+            x,
+            self.mean_weight + self.std_dev_weight * self.noise_weight,
+            self.mean_bias + self.std_dev_bias * self.noise_bias,
+        )
+    
+    
         
 class DuelingDeepQNetwork(nn.Module):
-    # lr            = learning rate
-    # input_dims    = input dimensions
-    # fc1_dims      = fully connected layer 1 dimensions
-    # fc2_dims      = fully connected layer 2 dimensions
-    # n_actions     = number of actions
-    def __init__(self, input_dims, nn_dims, n_actions, checkpoint_dir, name):
+    def __init__(self, input_dims, output_dims, nn_dims, atom_size, checkpoint_dir, name, support):
+        """
+        Initializes the DuelingDeepQNetwork agent.
+
+        Args:
+            input_dims (int): The number of input dimensions.
+            output_dims (int): The number of output dimensions.
+            nn_dims (int): The number of dimensions for the neural network layers.
+            n_actions (int): The number of possible actions.
+            atom_size (int): The number of atoms for the value distribution.
+            checkpoint_dir (str): The directory to save checkpoints.
+            name (str): The name of the checkpoint file.
+            support (torch.Tensor): The support values for the value distribution.
+        """
         super(DuelingDeepQNetwork, self).__init__()    # Inheriting from nn.Module
+
+        self.support = support
+        self.atoms = atom_size
+        self.output_dims = output_dims
 
         self.checkpoint_dir = checkpoint_dir
         self.checkpoint_file = os.path.join(self.checkpoint_dir, name)  # Save our checkpoint directory for later use
@@ -121,23 +186,33 @@ class DuelingDeepQNetwork(nn.Module):
             nn.ReLU(),
         )
         
-        self.V = nn.Sequential( # Value stream: tells the agent the value of the current state
-            nn.Linear(nn_dims, nn_dims),
-            nn.ReLU(),
-            nn.Linear(nn_dims, 1),
-        )
+        self.V_hidden = NoisyLayer(nn_dims, nn_dims) # Value Stream
+        self.V = NoisyLayer(nn_dims, atom_size)
         
-        self.A = nn.Sequential( # Advantage stream: tells the agent the relative advantage of eachh action in a given state
-            nn.Linear(nn_dims, nn_dims),
-            nn.ReLU(),
-            nn.Linear(nn_dims, n_actions)
-        )     
+        self.A_hidden = NoisyLayer(nn_dims, nn_dims) # Advantage Stream
+        self.A = NoisyLayer(nn_dims, atom_size * output_dims)
 
-    def forward(self, state):
-        x = self.feature(state)
-        V = self.V(x)
-        A = self.A(x)
-        return V + A - A.mean(dim=-1, keepdim=True)
+    def forward(self, x: T.tensor):
+        dist = self.distrib(x)
+        q = T.sum(dist * self.support, dim=2)
+        return q
+    
+    def distrib(self,x):
+        feature = self.feature(x)
+        A = F.relu(self.A_hidden(feature))
+        V = F.relu(self.V_hidden(feature))
+        A = self.A(A).view(-1, self.output_dims, self.atoms)
+        V = self.V(V).view(-1, 1, self.atoms)
+        q_atoms = V + A - A.mean(dim=1, keepdim=True)
+        dist = F.softmax(q_atoms, dim=-1)
+        dist = dist.clamp(min=1e-3)
+        return dist
+    
+    def reset(self):
+        self.A_hidden.reset()
+        self.V_hidden.reset()
+        self.A.reset()
+        self.V.reset()
     
     #Save and load checkpoints
     def save_checkpoint(self):
@@ -151,7 +226,7 @@ class DuelingDeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, eps_min=0.1, replace=1000, checkpoint_dir='tmp/'): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, eps_min=0.1, replace=1000, checkpoint_dir='tmp/', min_return_value = 0.0, max_return_value = 200.0, atom_size = 51): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -177,14 +252,20 @@ class DQNAgent():
 
         self.device = T.device("cuda" if T.cuda.is_available() else "cpu")
 
+        # Categorical DQN params
+        self.min_return_value = min_return_value
+        self.max_return_value = max_return_value
+        self.atoms = atom_size
+        self.value_distribution = T.linspace(self.min_return_value, self.max_return_value, self.atoms).to(self.device)
+
         # Q Evaluation Network
-        self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
-                                    n_actions=self.n_actions, name='surround_dueling_ddqn',
-                                    checkpoint_dir=self.checkpoint_dir)
+        self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], output_dims=self.n_actions, nn_dims=hidden_neurons,
+                                    atom_size=atom_size, name='surround_dueling_ddqn',
+                                    checkpoint_dir=self.checkpoint_dir, support=self.value_distribution)
         
-        self.target_network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], nn_dims=hidden_neurons,
-                                    n_actions=self.n_actions, name='surround_dueling_ddqn_target',
-                                    checkpoint_dir=self.checkpoint_dir)
+        self.target_network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], output_dims=self.n_actions, nn_dims=hidden_neurons,
+                                    atom_size=atom_size, name='surround_dueling_ddqn_target',
+                                    checkpoint_dir=self.checkpoint_dir, support=self.value_distribution)
         self.target_network.load_state_dict(self.network.state_dict())
         self.target_network.eval()
         
@@ -195,12 +276,9 @@ class DQNAgent():
         self.testing = False
          
     def action(self, state: np.ndarray):
-        '''Action choice based on epsilon-greedy policy, returns the action as a np.ndarray'''
-        if np.random.random() > self.epsilon: 
-            action = self.network(T.FloatTensor(state).to(self.device)).argmax()
-            action = action.detach().cpu().numpy() 
-        else: 
-            action = np.random.choice(self.action_space) 
+        '''Action choice based on epsilon-greedy policy, returns the action as a np.ndarray''' 
+        action = self.network(T.FloatTensor(state).to(self.device)).argmax()
+        action = action.detach().cpu().numpy() 
         
         if not self.testing:
             self.transition = [state, action]
@@ -216,8 +294,8 @@ class DQNAgent():
         self.target_network.save_checkpoint()
 
     def load_models(self):
-        self.Q_eval.load_checkpoint()
-        self.Q_next.load_checkpoint()
+        self.network.load_checkpoint()
+        self.target_network.load_checkpoint()
 
     def learn(self):
         batches = self.memory.sample()
@@ -227,35 +305,47 @@ class DQNAgent():
         loss.backward()
         nn.utils.clip_grad_norm_(self.network.parameters(), 1) # clips gradients between -1 and 1, can change
         self.optimiser.step()
+        
         priority_loss = pre_loss.detach().cpu().numpy()
         new_priorities = priority_loss + self.per_const
-        self.memory.update(batches["indices"], new_priorities)
+        self.memory.update(batches['indices'], new_priorities)
+        self.network.reset()
+        self.target_network.reset()
         return loss.item()
 
     def calculate_loss(self, samples):
         """loss function to simplify learn() function"""
         state = T.FloatTensor(samples["states"]).to(self.device)
         next_state = T.FloatTensor(samples["next_states"]).to(self.device)
-        action = T.LongTensor(samples["actions"].reshape(-1, 1)).to(self.device)
+        action = T.LongTensor(samples["actions"]).to(self.device)
         reward = T.FloatTensor(samples["rewards"].reshape(-1, 1)).to(self.device)
         done = T.FloatTensor(samples["dones"].reshape(-1, 1)).to(self.device)
+        delta = float(self.max_return_value - self.min_return_value) / (self.atoms - 1)
+        
+        with T.no_grad():
+            next_action = self.network(next_state).argmax(1)
+            next_dist = self.target_network.distrib(next_state)
+            next_dist = next_dist[range(self.batch_size), next_action]
 
-        current_q = self.network(state).gather(1, action)
-        next_q = self.target_network(next_state).max(dim=1, keepdim=True)[0].detach()
-        if_done = 1 - done # sets gamma*Q to zero if step lead to termination or truncation
-        target = (reward + self.gamma * next_q * if_done).to(self.device)
+            target_return = reward + (1 - done) * self.gamma * self.value_distribution
+            target_return = target_return.clamp(min=self.min_return_value, max=self.max_return_value)
+            support_indices = (target_return - self.min_return_value) / delta
+            lower_bound = support_indices.floor().long()
+            upper_bound = support_indices.ceil().long()
 
-        loss = F.smooth_l1_loss(current_q, target, reduction="none") # Currently on smooth_l1_loss, can change to MSE or others.
+            offset = (T.linspace(0, (self.batch_size - 1) * self.atoms, self.batch_size).long().unsqueeze(1).expand(self.batch_size, self.atoms).to(self.device))
+
+            proj_dist = T.zeros(next_dist.size(), device=self.device)
+            proj_dist.view(-1).index_add_(0, (lower_bound + offset).view(-1), (next_dist * (upper_bound.float() - support_indices)).view(-1))
+            proj_dist.view(-1).index_add_(0, (upper_bound + offset).view(-1), (next_dist * (support_indices - lower_bound.float())).view(-1))
+
+        dist = self.network.distrib(state)
+        lol = dist[range(self.batch_size), action]
+        log_p = T.log(lol)
+        loss = -(proj_dist * log_p).sum(1)
 
         return loss
 
-    def decay_epsilon(self, step, steps, linear=False):
-        if linear:
-            dec = (self.eps_max - self.eps_min) / steps
-            self.epsilon = max(self.eps_min, self.eps_max - dec * step)
-        else:
-            self.epsilon = self.eps_min + (self.eps_max - self.eps_min) * math.exp(-1. * step * math.log((self.eps_max / self.eps_min), math.e) / steps)
-        
     def train(self, steps):
         self.testing = False
         tracked_info = {
@@ -272,9 +362,8 @@ class DQNAgent():
             next_state, reward, terminated, truncated, _ = self.env.step(action)
             state = next_state
             done = terminated or truncated
-            # if not done:
-            #     reward += 0.01
             score += reward
+            
             self.beta = self.beta + min(step/steps,1)*(1-self.beta)
             
             if not self.testing:
@@ -293,7 +382,6 @@ class DQNAgent():
                 loss = self.learn()
                 tracked_info["losses"].append(loss)
                 learn_count += 1
-                self.decay_epsilon(step, steps,linear=False)
                 tracked_info["epsilons"].append(self.epsilon)
                 self.replace_target_network(learn_count)
                 
