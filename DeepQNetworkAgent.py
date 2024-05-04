@@ -218,7 +218,7 @@ class DuelingDeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, replace=1000, checkpoint_dir='tmp/', min_return_value = 0.0, max_return_value = 200.0, atom_size = 51): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, min_return_value, max_return_value, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, replace=1000, checkpoint_dir='tmp/', atom_size = 51): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
