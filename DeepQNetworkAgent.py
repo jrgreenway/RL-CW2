@@ -11,6 +11,7 @@ import os
 import math
 from segment_tree import SumSegmentTree, MinSegmentTree
 from tqdm import tqdm
+import logging
 
 class ReplayMemory():
     def __init__(self, observation_dims, memory_size, batch_size):
@@ -101,7 +102,7 @@ class PrioritisedReplay(ReplayMemory):
 class NoisyLayer(nn.Module):
     ''' in_features = Number of input features
         out_features= Number of output features
-        sigma_init  = Initial sigma (standard deviation) parameter'''
+        sigma  = Initial sigma (standard deviation) parameter'''
     def __init__(self,input_features, output_features, sigma=0.017):
         super(NoisyLayer, self).__init__()
         self.input_features = input_features
@@ -218,7 +219,7 @@ class DuelingDeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, min_return_value, max_return_value, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, replace=1000, checkpoint_dir='tmp/', atom_size = 51): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, min_return_value, max_return_value, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, replace=1000, checkpoint_dir='tmp/', atom_size = 51, log=True): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -263,7 +264,13 @@ class DQNAgent():
         self.transition = []
         
         self.testing = False
-         
+        
+        if log:
+            self.logger = logging.getLogger()
+            self.logger.setLevel(logging.INFO)
+            self.handler = logging.FileHandler('logs.log')  # logs will be stored in this file
+            self.formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
+
     def action(self, state: np.ndarray):
         '''Action choice based on epsilon-greedy policy, returns the action as a np.ndarray''' 
         action = self.network(T.FloatTensor(state).to(self.device)).argmax()
@@ -342,7 +349,7 @@ class DQNAgent():
             "losses":[]
         }
         learn_count = 0
-        episodes = 0
+        episodes = 1
         score = 0
         state, _ = self.env.reset()
         for step in tqdm(range(1,steps+1)):
@@ -361,6 +368,7 @@ class DQNAgent():
             if done:
                 state, _ = self.env.reset()
                 tracked_info["scores"].append(score)
+                self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info["scores"][-10:])}")
                 score = 0
                 episodes+=1
                 if episodes > 10 and episodes % 10 == 0:
