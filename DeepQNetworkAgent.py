@@ -3,22 +3,14 @@ from collections import deque
 import gymnasium
 import torch as T
 import torch.nn as nn               # Neural Network (nn)
-# We may need to import something for convulutional layers because we are working with images
 import torch.nn.functional as F     # Activation Functions
 import torch.optim as optim         # nn Optimiser
 import numpy as np                  # numpy
-from termcolor import colored       # Colored text for debugging
 import random
 import os
 import math
 from segment_tree import SumSegmentTree, MinSegmentTree
-
-from tqdm import tqdm                           # For file joining operations to handle model checkpointing
-
-# This inmplementation has no target network or convulutional layers
-# Convulutional layers are used to process the image and extract features from it
-# Target network is basically a copy of the main network that is updated every few steps
-
+from tqdm import tqdm
 
 class ReplayMemory():
     def __init__(self, observation_dims, memory_size, batch_size):
@@ -226,7 +218,7 @@ class DuelingDeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, eps_min=0.1, replace=1000, checkpoint_dir='tmp/', min_return_value = 0.0, max_return_value = 200.0, atom_size = 51): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, alpha=0.6, beta=0.4,per_const=1e-6, max_memory_size=100000, hidden_neurons=64, replace=1000, checkpoint_dir='tmp/', min_return_value = 0.0, max_return_value = 200.0, atom_size = 51): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -242,9 +234,6 @@ class DQNAgent():
         self.beta = beta
         self.memory = PrioritisedReplay(self.observation_shape[0], max_memory_size, batch_size, alpha)
         
-        self.epsilon = epsilon
-        self.eps_max = epsilon
-        self.eps_min = eps_min
         self.gamma = gamma
 
         self.replace_target_count = replace
@@ -350,8 +339,7 @@ class DQNAgent():
         self.testing = False
         tracked_info = {
             "scores":[],
-            "losses":[],
-            "epsilons":[]
+            "losses":[]
         }
         learn_count = 0
         episodes = 0
@@ -382,7 +370,6 @@ class DQNAgent():
                 loss = self.learn()
                 tracked_info["losses"].append(loss)
                 learn_count += 1
-                tracked_info["epsilons"].append(self.epsilon)
                 self.replace_target_network(learn_count)
                 
         self.env.close()
