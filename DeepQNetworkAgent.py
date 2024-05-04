@@ -102,7 +102,7 @@ class PrioritisedReplay(ReplayMemory):
 class NoisyLayer(nn.Module):
     ''' in_features = Number of input features
         out_features= Number of output features
-        sigma_init  = Initial sigma (standard deviation) parameter'''
+        sigma  = Initial sigma (standard deviation) parameter'''
     def __init__(self,input_features, output_features, sigma=0.017):
         super(NoisyLayer, self).__init__()
         self.input_features = input_features
