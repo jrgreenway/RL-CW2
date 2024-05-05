@@ -235,11 +235,12 @@ class DQNAgent():
             if len(self.memory) >= self.batch_size:
                 loss = self.learn()
                 tracked_info["losses"].append(loss)
-                self.decay_epsilon(step, steps)
+                self.decay_epsilon(step, steps*0.75)
                 learn_count += 1
                 self.replace_target_network(learn_count)
                 
         self.env.close()
+        self.save_models()
         return tracked_info, parameters
                 
             
