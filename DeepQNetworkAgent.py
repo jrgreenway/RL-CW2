@@ -81,7 +81,7 @@ class DeepQNetwork(nn.Module):
 
 
 class DQNAgent():
-    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, eps_min, max_memory_size=100000, hidden_neurons=64, replace=1000, checkpoint_dir='tmp/', log=True): 
+    def __init__(self, env: gymnasium.Env, learning_rate, batch_size, gamma, epsilon, eps_min, max_memory_size=100000, hidden_neurons=128, replace=1000, checkpoint_dir='tmp/', log=True): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
@@ -180,6 +180,7 @@ class DQNAgent():
         return loss
 
     def decay_epsilon(self, step, steps, linear=False):
+        if step >= steps: return
         if linear:
             dec = (self.eps_max - self.eps_min) / steps
             self.epsilon = max(self.eps_min, self.eps_max - dec * step)
@@ -235,7 +236,7 @@ class DQNAgent():
             if len(self.memory) >= self.batch_size:
                 loss = self.learn()
                 tracked_info["losses"].append(loss)
-                self.decay_epsilon(step, steps*0.75)
+                self.decay_epsilon(step, steps*0.25)
                 learn_count += 1
                 self.replace_target_network(learn_count)
                 
