@@ -81,67 +81,17 @@ class nStepReplayMemory:
         
         return self.n_step_buffer[0] # return the single step transition
 
+    def sample_batch(self):
+        #Returns a batch of random experiences of size batch_size
+        batch_indexes = np.random.choice(self.size, size=self.batch_size, replace=False)
+        return dict(states=self.state_memory[batch_indexes], 
+                    next_states=self.next_state_memory[batch_indexes],
+                    actions=self.action_memory[batch_indexes],
+                    rewards=self.reward_memory[batch_indexes],
+                    dones=self.done_memory[batch_indexes])
+    
     def __len__(self):
         return self.size
-
-# THIS CHANGES WITH N STEP
-class PrioritisedReplay(nStepReplayMemory):
-    '''Prioritised Experience Replay, alpha must be positive >=0.'''
-    def __init__(self, observation_dims, memory_size, batch_size, alpha:float=0.6):
-        super(PrioritisedReplay, self).__init__(observation_dims, memory_size, batch_size)
-        self.alpha = alpha
-        self.max_priority = 1.0
-        self.tree_loc = 0
-        self.tree_size = 2**math.ceil(math.log2(memory_size)) #ensures tree_size is a power of 2
-        self.min_priorities_tree = MinSegmentTree(self.tree_size)
-        self.priorities_tree = SumSegmentTree(self.tree_size)
-    
-    def store_transition(self, state, action, reward, next_state, done):
-        '''Stores a transition step in memory'''
-        # STORE nSTEP EXPERIENCES INSTEAD
-        super().nStep_store(state, action, reward, next_state, done)
-        importance = self.max_priority ** self.alpha
-        self.priorities_tree[self.tree_loc] = importance
-        self.min_priorities_tree[self.tree_loc] = importance
-        self.tree_loc = (self.tree_loc+1) % self.max_memory_size
-    
-    def sample(self, beta=0.4):
-        #Get indices for batch
-        indices = []
-        total_priority = self.priorities_tree.sum(0, len(self) - 1)
-        segment = total_priority / self.batch_size
-        for i in range(self.batch_size):
-            a = segment*i
-            b = segment*(i + 1)
-            value = random.uniform(a, b)
-            index = self.priorities_tree.find_prefixsum_idx(value)
-            indices.append(index)
-        
-        #Weights
-        weights = np.array([self.get_weight(index, beta) for index in indices])
-        return dict(states=self.state_memory[indices], 
-                    next_states=self.next_state_memory[indices],
-                    actions=self.action_memory[indices],
-                    rewards=self.reward_memory[indices],
-                    dones=self.done_memory[indices],
-                    weights=weights,
-                    indices=indices)
-        
-    def update(self, indices, priorities):
-        '''Updates the priorities of transitions[indices]'''
-        for i, priority in zip(indices, priorities):
-            self.priorities_tree[i] = priority ** self.alpha
-            self.min_priorities_tree[i] = priority ** self.alpha
-            self.max_priority = max(self.max_priority, priority)
-        
-    def get_weight(self, index, beta):
-        '''Gets the importance sampling weight for an index in segment trees'''
-        min_priority = self.min_priorities_tree.min()/self.priorities_tree.sum()
-        max_weight = (min_priority*len(self))**(-beta)
-        priority = self.priorities_tree[index]/self.priorities_tree.sum()
-        weight = (priority * len(self)) ** (-beta)
-        weight = weight / max_weight
-        return weight 
     
 class NoisyLayer(nn.Module):
     ''' in_features = Number of input features
@@ -275,7 +225,6 @@ class DQNAgent():
             per_const=1e-6,
             max_memory_size=100000,
             hidden_neurons=128,
-            eps_min=0.001,
             replace_target_nn=1000,
             checkpoint_dir='tmp/',
             n_step = 3, # n-step learning
@@ -296,7 +245,7 @@ class DQNAgent():
         
         self.per_const = per_const
         self.beta = beta
-        self.memory = PrioritisedReplay(self.observation_shape[0], max_memory_size, batch_size, alpha)
+        self.memory = nStepReplayMemory(self.observation_shape[0], max_memory_size, batch_size, n_step=n_step, gamma=gamma)
         
         self.gamma = gamma
 
@@ -376,17 +325,13 @@ class DQNAgent():
         self.target_network.load_checkpoint()
 
     def learn(self):
-        batches = self.memory.sample()  ## Prioritised replay
-        pre_loss = self.calculate_loss(batches)
-        loss = T.mean(pre_loss*T.FloatTensor(batches["weights"].reshape(-1, 1)).to(self.device))
+        batches = self.memory.sample_batch()  # replace with your method for uniform sampling
+        loss = self.calculate_loss(batches)
         self.optimiser.zero_grad()
         loss.backward()
         nn.utils.clip_grad_norm_(self.network.parameters(), 1) # clips gradients between -1 and 1, can change
         self.optimiser.step()
         
-        priority_loss = pre_loss.detach().cpu().numpy()
-        new_priorities = priority_loss + self.per_const
-        self.memory.update(batches['indices'], new_priorities)
         self.network.reset()
         self.target_network.reset()
         return loss.item()
@@ -434,8 +379,6 @@ class DQNAgent():
             replace=self.replace_target_count,
             min_return_value=self.min_return_value,
             max_return_value=self.max_return_value,
-            alpha=self.memory.alpha,
-            beta=self.beta,
             per_const=self.per_const,
             atom_size=self.network.atoms,
             n_step=self.n_step
@@ -463,7 +406,7 @@ class DQNAgent():
             
             if not self.testing:
                 self.transition += [reward, next_state, done]
-                self.memory.store_transition(*self.transition)    ## Prioritised replay
+                self.memory.nStep_store(*self.transition)    ## Prioritised replay
             
             if done:
                 state, _ = self.env.reset()
