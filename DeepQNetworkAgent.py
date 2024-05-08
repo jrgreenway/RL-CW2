@@ -318,6 +318,7 @@ class DQNAgent():
 
         self.device = T.device("cuda" if T.cuda.is_available() else "cpu")
         print(colored(f"Using {self.device}", "green"))
+        
         # Categorical DQN params
         self.min_return_value = min_return_value
         self.max_return_value = max_return_value
@@ -328,11 +329,11 @@ class DQNAgent():
         # Q Evaluation Network
         self.network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], output_dims=self.n_actions, nn_dims=hidden_neurons,
                                     atom_size=atom_size, name='surround_dueling_ddqn',
-                                    checkpoint_dir=self.checkpoint_dir, support=self.value_distribution)
+                                    checkpoint_dir=self.checkpoint_dir, support=self.value_distribution).to(self.device)
         
         self.target_network = DuelingDeepQNetwork(input_dims=self.observation_shape[0], output_dims=self.n_actions, nn_dims=hidden_neurons,
                                     atom_size=atom_size, name='surround_dueling_ddqn_target',
-                                    checkpoint_dir=self.checkpoint_dir, support=self.value_distribution)
+                                    checkpoint_dir=self.checkpoint_dir, support=self.value_distribution).to(self.device)
         self.target_network.load_state_dict(self.network.state_dict())
         self.target_network.eval()
         
@@ -481,6 +482,7 @@ class DQNAgent():
                 
         self.env.close()
         return tracked_info, parameters
+    
+        
                 
             
-
