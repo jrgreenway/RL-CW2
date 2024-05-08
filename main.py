@@ -5,7 +5,7 @@ from termcolor import colored
 from gymnasium.wrappers import RecordVideo
 
 
-total_frames = int(1e5)
+total_frames = int(1e3)
 
 def step_trigger(step):
     return step == 0 or (step > total_frames-1000)
@@ -35,4 +35,4 @@ if load_checkpoint:
 
 data, params = agent.train(total_frames)
 print(colored('Training Complete', 'green'))
-grapher = Grapher(data, params)
+#grapher = Grapher(data, params)

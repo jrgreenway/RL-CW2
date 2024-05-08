@@ -293,6 +293,7 @@ class DQNAgent():
         
         self.testing = False
         
+        self.log = log
         if log:
             self.logger = logging.getLogger()
             self.logger.setLevel(logging.INFO)
@@ -325,7 +326,7 @@ class DQNAgent():
         self.target_network.load_checkpoint()
 
     def learn(self):
-        batches = self.memory.sample_batch()  # replace with your method for uniform sampling
+        batches = self.memory.sample_batch()
         loss = self.calculate_loss(batches)
         self.optimiser.zero_grad()
         loss.backward()
@@ -365,7 +366,7 @@ class DQNAgent():
         dist = self.network.distrib(state)
         lol = dist[range(self.batch_size), action]
         log_p = T.log(lol)
-        loss = -(proj_dist * log_p).sum(1)
+        loss = -(proj_dist * log_p).sum(1).mean()
 
         return loss
 
@@ -411,7 +412,8 @@ class DQNAgent():
             if done:
                 state, _ = self.env.reset()
                 tracked_info["scores"].append(score)
-                self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
+                if self.log:
+                    self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
                 score = 0
                 episodes+=1
                 if episodes > 10 and episodes % 50 == 0:
