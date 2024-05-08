@@ -122,7 +122,7 @@ class DQNAgent():
         self.transition = []
         
         self.testing = False
-        
+        self.log = log
         if log:
             self.logger = logging.getLogger()
             self.logger.setLevel(logging.INFO)
@@ -226,7 +226,8 @@ class DQNAgent():
                 state, _ = self.env.reset()
                 tracked_info["scores"].append(score)
                 tracked_info["epsilons"].append(self.epsilon)
-                self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
+                if self.log:
+                    self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
                 score = 0
                 episodes+=1
                 if episodes > 10 and episodes % 10 == 0:
