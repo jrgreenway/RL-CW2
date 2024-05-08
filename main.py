@@ -14,7 +14,7 @@ def ep_trig(episode):
 
 for iter in range(5):
     env = gym.make("LunarLander-v2", continuous=False, render_mode='rgb_array')
-    env = RecordVideo(env, video_folder="videos/", episode_trigger=ep_trig, video_length=0)
+    env = RecordVideo(env, video_folder="videos/", episode_trigger=ep_trig, video_length=0, name_prefix=f"run_{iter}")
 
     agent = DQNAgent(env,
                     0.001,
