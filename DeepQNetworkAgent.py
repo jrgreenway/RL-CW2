@@ -212,7 +212,10 @@ class DQNAgent():
         score = 0
         state, _ = self.env.reset()
         for step in tqdm(range(1,steps+1)):
-            action = self.action(state)
+            action = np.random.choice(self.action_space)
+            if episodes < 5:
+                print(action)
+                print(self.action_space)
             next_state, reward, terminated, truncated, _ = self.env.step(action)
             state = next_state
             done = terminated or truncated
@@ -229,18 +232,8 @@ class DQNAgent():
                 self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
                 score = 0
                 episodes+=1
-                if episodes > 10 and episodes % 10 == 0:
-                    self.save_models()
-            
-            if len(self.memory) >= self.batch_size:
-                loss = self.learn()
-                tracked_info["losses"].append(loss)
-                self.decay_epsilon(step, steps*0.25)
-                learn_count += 1
-                self.replace_target_network(learn_count)
                 
         self.env.close()
-        self.save_models()
         return tracked_info, parameters
                 
             
