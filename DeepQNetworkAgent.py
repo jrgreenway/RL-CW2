@@ -449,7 +449,7 @@ class DQNAgent():
             if done:
                 state, _ = self.env.reset()
                 tracked_info["scores"].append(score)
-                self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info["scores"][-10:])}")
+                self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
                 score = 0
                 episodes+=1
                 if episodes > 10 and episodes % 10 == 0:
