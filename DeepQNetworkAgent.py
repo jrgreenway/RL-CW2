@@ -129,10 +129,7 @@ class PrioritisedReplay(nStepReplayMemory):
         
     def update(self, indices, priorities):
         '''Updates the priorities of transitions[indices]'''
-        assert len(indices) == len(priorities)
         for i, priority in zip(indices, priorities):
-            assert priority > 0
-            assert 0 <= i < len(self)
             self.priorities_tree[i] = priority ** self.alpha
             self.min_priorities_tree[i] = priority ** self.alpha
             self.max_priority = max(self.max_priority, priority)
@@ -340,7 +337,7 @@ class DQNAgent():
         self.target_network.eval()
         
         # Optimser
-        self.optimiser = optim.Adam(self.network.parameters())
+        self.optimiser = optim.Adam(self.network.parameters(), lr=self.learning_rate)
         
         self.transition = []
         
@@ -349,8 +346,11 @@ class DQNAgent():
         if log:
             self.logger = logging.getLogger()
             self.logger.setLevel(logging.INFO)
-            self.handler = logging.FileHandler('logs.log')  # logs will be stored in this file
+            self.handler = logging.FileHandler('logs.log')
+            self.handler.setLevel(logging.INFO)
             self.formatter = logging.Formatter('%(asctime)s - %(name)s - %(message)s')
+            self.handler.setFormatter(self.formatter)
+            self.logger.addHandler(self.handler)
 
     def action(self, state: np.ndarray):
         '''Action choice based on epsilon-greedy policy, returns the action as a np.ndarray''' 
@@ -423,12 +423,31 @@ class DQNAgent():
 
         return loss
 
+    def make_params_dict(self):
+        return dict(
+            env=self.env.spec.id,
+            learning_rate=self.learning_rate,
+            batch_size=self.batch_size,
+            gamma=self.gamma,
+            max_memory_size=self.memory_size,
+            replace=self.replace_target_count,
+            min_return_value=self.min_return_value,
+            max_return_value=self.max_return_value,
+            alpha=self.memory.alpha,
+            beta=self.beta,
+            per_const=self.per_const,
+            hidden_neurons=self.network.hidden_neurons,
+            atom_size=self.network.atoms,
+            n_step=self.n_step
+        )
+
     def train(self, steps):
         self.testing = False
         tracked_info = {
             "scores":[],
             "losses":[]
         }
+        parameters = self.make_params_dict()
         learn_count = 0
         episodes = 1
         score = 0
