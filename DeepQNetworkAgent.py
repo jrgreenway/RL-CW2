@@ -15,7 +15,7 @@ from tqdm import tqdm
 import logging
 
 class ReplayMemory():
-    def __init__(self, observation_dims, action_dims, memory_size, batch_size):
+    def __init__(self, observation_dims, memory_size, batch_size):
         # Experience memory
         self.batch_size = batch_size
         self.memory_size = memory_size
@@ -23,7 +23,7 @@ class ReplayMemory():
         self.size = 0
         self.state_memory = np.zeros((memory_size, observation_dims), dtype=np.float32)
         self.next_state_memory = np.zeros((memory_size, observation_dims), dtype=np.float32)
-        self.action_memory = np.zeros((memory_size, action_dims), dtype=np.int32)
+        self.action_memory = np.zeros((memory_size), dtype=np.int32)
         self.reward_memory = np.zeros((memory_size), dtype=np.float32)
         self.done_memory = np.zeros(memory_size, dtype=bool)
     
@@ -68,7 +68,7 @@ class DeepQNetwork(nn.Module):
 
     def forward(self, x: T.tensor):
         feat = self.feature(x)
-        return T.tanh(feat)
+        return feat
     
     #Save and load checkpoints
     def save_checkpoint(self):
@@ -93,10 +93,11 @@ class DQNAgent():
         self.batch_size = batch_size
         self.observation_space = env.observation_space
         self.observation_shape = env.observation_space.shape
-        self.n_actions = env.action_space.shape[0]
+        self.n_actions = env.action_space.n
+        self.action_space = [i for i in range(self.n_actions)]
         self.memory_size = max_memory_size
         
-        self.memory = ReplayMemory(self.observation_shape[0], self.n_actions, max_memory_size, batch_size)
+        self.memory = ReplayMemory(self.observation_shape[0], max_memory_size, batch_size)
         
         self.gamma = gamma
 
@@ -136,11 +137,10 @@ class DQNAgent():
     def action(self, state: np.ndarray):
         '''Action choice based on epsilon-greedy policy, returns the action as a np.ndarray''' 
         if np.random.random() > self.epsilon:
-            action = self.network(T.FloatTensor(state).to(self.device))
+            action = self.network(T.FloatTensor(state).to(self.device)).argmax()
             action = action.detach().cpu().numpy()
         else:
-            action = np.random.uniform(-1, 1, self.n_actions)
-        
+            action = np.random.choice(self.action_space)
         if not self.testing:
             self.transition = [state, action]
         return action
@@ -170,10 +170,11 @@ class DQNAgent():
         """loss function to simplify learn() function"""
         state = T.FloatTensor(samples["states"]).to(self.device)
         next_state = T.FloatTensor(samples["next_states"]).to(self.device)
+        action = T.LongTensor(samples["actions"].reshape(-1,1)).to(self.device)
         reward = T.FloatTensor(samples["rewards"].reshape(-1, 1)).to(self.device)
         done = T.FloatTensor(samples["dones"].reshape(-1, 1)).to(self.device)
-        current_q = self.network(state)
-        next_q = self.target_network(next_state).detach()
+        current_q = self.network(state).gather(1, action)
+        next_q = self.target_network(next_state).max(dim=1, keepdim=True)[0].detach()
         target_q = (reward+self.gamma*next_q*(1-done)).to(self.device)
         loss = F.smooth_l1_loss(current_q, target_q)
         return loss
