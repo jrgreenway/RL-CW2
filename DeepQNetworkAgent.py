@@ -436,7 +436,6 @@ class DQNAgent():
             alpha=self.memory.alpha,
             beta=self.beta,
             per_const=self.per_const,
-            hidden_neurons=self.network.hidden_neurons,
             atom_size=self.network.atoms,
             n_step=self.n_step
         )
