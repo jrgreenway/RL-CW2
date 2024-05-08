@@ -11,7 +11,7 @@ class Grapher():
         self.args = args
         os.makedirs('graphs', exist_ok=True)
         self.plot_data()
-        self.save_args()
+        self.save_all()
 
     def save_all(self):
         to_save = dict(

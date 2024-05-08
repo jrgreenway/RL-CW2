@@ -11,12 +11,12 @@ agent = DQNAgent(
     learning_rate=0.0001,
     batch_size=64,
     gamma=0.99,
-    min_return_value=0,
-    max_return_value=500,
+    min_return_value=-300,
+    max_return_value=300,
     replace_target_nn=500,
     max_memory_size=10000)
 
-total_frames = int(1e4) # Think we should consider changing to number of frames not episodes
+total_frames = int(1e5) # Think we should consider changing to number of frames not episodes
 load_checkpoint = False
 
 if load_checkpoint:
