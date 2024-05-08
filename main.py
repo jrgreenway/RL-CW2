@@ -8,15 +8,17 @@ from gymnasium.wrappers import RecordVideo
 total_frames = int(1e5)
 
 def step_trigger(step):
-    return step == 0 or step == 300
+    return step == 0 or (step > total_frames-1000)
 
+def ep_trig(episode):
+    return episode == 0 or (episode % 5 == 0 and episode > 250)
 
 env = gym.make("LunarLander-v2", continuous=False, render_mode='rgb_array')
-env = RecordVideo(env, video_folder="videos/", step_trigger=step_trigger, video_length=1500)
+env = RecordVideo(env, video_folder="videos/", episode_trigger=ep_trig, video_length=0)
 
 agent = DQNAgent(
     env,
-    learning_rate=0.0001,
+    learning_rate=0.001,
     batch_size=64,
     gamma=0.99,
     beta=0.95,
