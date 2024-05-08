@@ -13,7 +13,7 @@ def ep_trig(episode):
     return episode == 0 or (episode % 5 == 0 and episode > 250)
 
 for iter in range(5):
-    env = gym.make("LunarLander-v2", continuous=False, render_mode='rgb_array')
+    env = gym.make("LunarLander-v2", continuous=False, render_mode='rgb_array', name_prefix=f"run_{iter}")
     env = RecordVideo(env, video_folder="videos/", episode_trigger=ep_trig, video_length=0)
 
     agent = DQNAgent(
