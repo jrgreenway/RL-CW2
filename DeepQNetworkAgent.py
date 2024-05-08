@@ -12,7 +12,8 @@ import math
 from segment_tree import SumSegmentTree, MinSegmentTree
 from collections import deque
 import logging
-from tqdm import tqdm                           # For file joining operations to handle model checkpointing
+from tqdm import tqdm
+from termcolor import colored
 
 
 class nStepReplayMemory:
@@ -280,10 +281,10 @@ class DQNAgent():
             eps_min=0.001,
             replace_target_nn=1000,
             checkpoint_dir='tmp/',
-            n_step = 3 # n-step learning
+            n_step = 3, # n-step learning
             atom_size = 51, 
             log=True
-            ): 
+        ): 
         # Adjust epsilon decay rate later, right now linear decay
 
         self.env = env
