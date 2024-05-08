@@ -1,6 +1,5 @@
 #Imports
 from collections import deque
-from re import L
 import gymnasium
 import torch as T
 import torch.nn as nn               # Neural Network (nn)
