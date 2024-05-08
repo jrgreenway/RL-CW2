@@ -4,13 +4,13 @@ from grapher import Grapher
 from termcolor import colored
 
 
-env = gym.make("CartPole-v1") # "ALE/Surround-v5"  #render_mode'human' ?
+env = gym.make("LunarLander-v2", continuous=False)
 
 agent = DQNAgent(
     env,
     learning_rate=0.0001,
     batch_size=64,
-    gamma=0.95,
+    gamma=0.99,
     min_return_value=0,
     max_return_value=500,
     replace_target_nn=500,
