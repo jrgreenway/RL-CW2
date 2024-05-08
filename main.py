@@ -22,6 +22,6 @@ load_checkpoint = False
 if load_checkpoint:
     agent.load_models()
 
-data = agent.train(total_frames)
+data, params = agent.train(total_frames)
 print(colored('Training Complete', 'green'))
-grapher = Grapher(data)
+grapher = Grapher(data, params)

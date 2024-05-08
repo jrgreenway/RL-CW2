@@ -470,7 +470,7 @@ class DQNAgent():
                 self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
                 score = 0
                 episodes+=1
-                if episodes > 10 and episodes % 10 == 0:
+                if episodes > 10 and episodes % 50 == 0:
                     self.save_models()
             
             if len(self.memory) >= self.batch_size:
@@ -480,7 +480,7 @@ class DQNAgent():
                 self.replace_target_network(learn_count)
                 
         self.env.close()
-        return tracked_info
+        return tracked_info, parameters
                 
             
 
