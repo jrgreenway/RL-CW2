@@ -13,9 +13,14 @@ class Grapher():
         self.plot_data()
         self.save_args()
 
-    def save_args(self):
+    def save_all(self):
+        to_save = dict(
+            time=self.timestamp,
+            parameters=self.args,
+            data=self.data 
+        )
         with open(f'graphs/{self.timestamp}_parameters.json', 'w') as f:
-            json.dump(self.args, f)
+            json.dump(to_save, f)
 
     def plot_data(self):
         for key in self.data.keys():
