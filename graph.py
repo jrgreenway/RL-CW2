@@ -5,54 +5,39 @@ import numpy as np
 
 files = os.listdir("data/")
 
-rewards = None
-losses = None
-epsilons = None
-labels = None
-def check_none(var):
-    return var==None
+def moving_average(data, window_size):
+    return np.convolve(data, np.ones(window_size), 'valid') / window_size
     
 
+    
+    
 for file in files:
-    with open(f"data/{file}", "r") as json_file:
-        data = json.load(json_file)
-    rew = np.array(data.get('rewards', None))
-    if check_none(rewards) and (data.get('rewards', None) is not None):
-        rewards = rew
-    else:
-        rewards.append(rew)
-        
-    loss = np.array(data.get('losses', None))
-    if check_none(losses) and (data.get('losses', None) is not None):
-        losses = loss
-    else:
-        losses.append(loss)
+    with open("data/"+file, "r") as f:
+        data = json.load(f)
+    data = data["data"]
+    fig, axs = plt.subplots(nrows=1, ncols=len(data.keys()), dpi=600, figsize=(15,5))
+    for i, key in enumerate(data.keys()):
+        if key == "scores":
+            x,y = range(len(data[key])),data[key]
+            axs[i].scatter(x,y, label="Rewards", marker="x", )
+            #moving_avg = moving_average(y, 20)
+            #axs[i].plot(moving_avg, color='red')
+            trend = np.polyfit(x, y, 3)
+            trendline = np.poly1d(trend)
+            axs[i].plot(x, trendline(x), color='green', label="Reward Trend")
+            axs[i].set_title("Rewards")
+            axs[i].set_ylabel("Reward")
+            axs[i].set_xlabel("Episode")
+            axs[i].grid(True)
+            
+        else:
+            axs[i].plot(data[key])
+            axs[i].set_title(key.capitalize())
+            axs[i].set_ylabel(key.capitalize())
+            axs[i].set_xlabel("Step")
+        if len(axs[i].lines) >1:
+            axs[i].legend(loc='upper center', bbox_to_anchor=(0.5, -0.05), shadow=True, ncol=len(axs[i].lines))
+    plt.tight_layout()
+    plt.savefig(f"{file}_plot.png")
     
-    epsilon = np.array(data.get('epsilons', None))
-    if check_none(epsilons) and (data.get('epsilons', None) is not None):
-        epsilons = epsilon
-    else:
-        epsilons.append(epsilon)
     
-    label = data.get('label', None)
-    if check_none(labels) and (data.get('label', None) is not None):
-        labels = label
-    else:
-        labels.append(label)
-        
-
-rewards = np.array([[labels[i], rewards[i]] for i in range(len(labels))])
-losses = np.array([[labels[i], losses[i]] for i in range(len(labels))])
-epsilons = np.array([[labels[i], epsilons[i]] for i in range(min(len(labels), len(epsilons)))])
-
-titles = ['rewards', 'losses', 'epsilons']
-for title, dataset in zip(titles, (rewards, losses, epsilons)):
-    fig, ax = plt.subplots()
-    for run in dataset:
-        ax.plot(run[1], label=run[0])
-    ax.legend()
-    plt.savefig(f"{title}.png", dpi=300)
-        
-        
-    
-        
