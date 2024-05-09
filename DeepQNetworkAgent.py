@@ -204,7 +204,6 @@ class DQNAgent():
         tracked_info = {
             "scores":[],
             "losses":[],
-            "epsilons":[]
         }
         parameters = self.make_params_dict()
         learn_count = 0
@@ -221,15 +220,10 @@ class DQNAgent():
             done = terminated or truncated
             score += reward
             
-            if not self.testing:
-                self.transition += [reward, next_state, done]
-                self.memory.store_transition(*self.transition)
             
             if done:
                 state, _ = self.env.reset()
                 tracked_info["scores"].append(score)
-                tracked_info["epsilons"].append(self.epsilon)
-                self.logger.info(f"Ep. Num.: {episodes}, Ep. Score: {score}, Avg. Score: {np.mean(tracked_info['scores'][-10:])}")
                 score = 0
                 episodes+=1
                 
