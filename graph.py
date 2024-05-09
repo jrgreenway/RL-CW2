@@ -29,7 +29,11 @@ for file in files:
             axs[i].set_ylabel("Reward")
             axs[i].set_xlabel("Episode")
             axs[i].grid(True)
-            
+        elif key == "epsilons":
+            axs[i].plot(data[key])
+            axs[i].set_title(key.capitalize())
+            axs[i].set_ylabel(key.capitalize())
+            axs[i].set_xlabel("Episode")
         else:
             axs[i].plot(data[key])
             axs[i].set_title(key.capitalize())
